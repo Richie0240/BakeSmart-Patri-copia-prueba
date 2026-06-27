@@ -16,6 +16,7 @@
 # Build output
 bin/
 obj/
+.data-protection/
 
 # Mono auto generated files
 mono_crash.*
