@@ -5,7 +5,7 @@ GO
 USE BakeSmartPatri;
 GO
 
---Creacion de la tabla Roles
+--Creacion de la tabla Roles prueba commit
 
 IF OBJECT_ID('Dbo.Roles', 'U') IS NOT NULL
 DROP TABLE dbo.Roles;
