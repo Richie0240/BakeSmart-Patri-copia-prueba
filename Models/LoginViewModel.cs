@@ -2,7 +2,7 @@
 
 namespace BakeSmartPatri.Models
 {
-    public class LoginViewModel //comentar si luego no funciona
+    public class LoginViewModel //comentar si luego no funciona.
     {
         [Required(ErrorMessage = "El correo electrónico es obligatorio.")]
         [EmailAddress(ErrorMessage = "Debe ingresar un correo válido.")]
