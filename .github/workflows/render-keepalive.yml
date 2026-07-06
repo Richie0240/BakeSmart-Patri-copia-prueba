@@ -1,0 +1,130 @@
+name: Render Keep Alive
+
+on:
+  # Corre cada 5 minutos, evitando el minuto 0 porque GitHub suele tener más carga ahí.
+  schedule:
+    - cron: "2-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-keepalive-bakesmart-patri
+  cancel-in-progress: false
+
+jobs:
+  keep-render-awake:
+    name: Keep Render app awake
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    env:
+      APP_URL: "https://bakesmart-patri.onrender.com"
+      MAX_ATTEMPTS: "12"
+      WAIT_SECONDS: "20"
+      REQUEST_TIMEOUT: "95"
+
+    steps:
+      - name: Warm Render app until real page is ready
+        shell: bash
+        run: |
+          set -u
+
+          echo "=================================================="
+          echo "Render Keep Alive - BakeSmart Patri"
+          echo "URL: ${APP_URL}"
+          echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "Attempts: ${MAX_ATTEMPTS}"
+          echo "Wait between attempts: ${WAIT_SECONDS}s"
+          echo "Request timeout: ${REQUEST_TIMEOUT}s"
+          echo "=================================================="
+
+          is_render_loading_page() {
+            local file="$1"
+
+            if grep -qiE "Incoming HTTP request detected|Service waking up|Application loading|Preparing instance for initialization|Starting the instance|Allocating compute resources" "$file"; then
+              return 0
+            fi
+
+            return 1
+          }
+
+          warm_request() {
+            local attempt="$1"
+            local target="${APP_URL}/?keepalive=${attempt}-$(date +%s)"
+            local body_file="/tmp/render-response-${attempt}.html"
+            local header_file="/tmp/render-headers-${attempt}.txt"
+
+            echo ""
+            echo "Attempt ${attempt}/${MAX_ATTEMPTS}"
+            echo "GET ${target}"
+
+            http_code=$(curl \
+              --location \
+              --silent \
+              --show-error \
+              --dump-header "$header_file" \
+              --output "$body_file" \
+              --write-out "%{http_code}" \
+              --max-time "${REQUEST_TIMEOUT}" \
+              --connect-timeout 25 \
+              --retry 3 \
+              --retry-all-errors \
+              --retry-delay 5 \
+              --user-agent "Mozilla/5.0 (GitHubActions RenderKeepAlive BakeSmartPatri)" \
+              --header "Cache-Control: no-cache, no-store, must-revalidate" \
+              --header "Pragma: no-cache" \
+              --header "Expires: 0" \
+              "$target" || echo "000")
+
+            echo "HTTP code: ${http_code}"
+
+            if [[ ! "$http_code" =~ ^[0-9]{3}$ ]]; then
+              echo "Invalid HTTP code returned by curl."
+              return 1
+            fi
+
+            if [[ "$http_code" -lt 200 || "$http_code" -ge 400 ]]; then
+              echo "App did not return a successful HTTP status."
+              echo "Response preview:"
+              head -n 25 "$body_file" 2>/dev/null || true
+              return 1
+            fi
+
+            if is_render_loading_page "$body_file"; then
+              echo "Render is still showing the wake/loading page. Waiting for the real app..."
+              echo "Response preview:"
+              head -n 25 "$body_file" 2>/dev/null || true
+              return 1
+            fi
+
+            bytes=$(wc -c < "$body_file" 2>/dev/null || echo 0)
+            echo "Response size: ${bytes} bytes"
+
+            if [[ "$bytes" -lt 200 ]]; then
+              echo "Response is too small; treating it as not fully ready yet."
+              return 1
+            fi
+
+            echo "OK: Real app responded successfully."
+            return 0
+          }
+
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            if warm_request "$attempt"; then
+              echo ""
+              echo "Final result: app is awake and serving the real page."
+              exit 0
+            fi
+
+            if [[ "$attempt" -lt "${MAX_ATTEMPTS}" ]]; then
+              echo "Waiting ${WAIT_SECONDS}s before next attempt..."
+              sleep "${WAIT_SECONDS}"
+            fi
+          done
+
+          echo ""
+          echo "Final result: app never served the real page after ${MAX_ATTEMPTS} attempts."
+          echo "Check Render instance type, deploy status, environment variables, and app startup logs."
+          exit 1
