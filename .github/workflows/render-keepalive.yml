@@ -1,12 +1,10 @@
 name: Render Keep Alive
 
 on:
-  push:
-    paths:
-      - ".github/workflows/render-keepalive.yml"
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    # Cada 5 minutos, evitando el minuto 0 porque GitHub puede atrasar o botar jobs con mucha carga.
+    - cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *"
 
 permissions:
   contents: read
@@ -32,7 +30,7 @@ jobs:
           echo "Branch: ${{ github.ref_name }}"
           echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S')"
 
-      - name: Ping app several times
+      - name: Ping Render app
         shell: bash
         run: |
           set -u
@@ -47,18 +45,20 @@ jobs:
               --connect-timeout 20 \
               --retry 2 \
               --retry-delay 5 \
-              -A "GitHubActions-KeepAlive" \
+              -A "GitHubActions-KeepAlive-BakeSmartPatri" \
               -H "Cache-Control: no-cache" \
               "$APP_URL/?keepalive=$attempt-$(date +%s)" || echo "000")
 
             echo "HTTP code: $code"
-            head -n 5 /tmp/render_body.html || true
+            head -n 8 /tmp/render_body.html || true
 
-            if [[ "$code" =~ ^2|3 ]]; then
+            if [[ "$code" =~ ^(2|3)[0-9][0-9]$ ]]; then
               success=1
             fi
 
-            sleep 20
+            if [[ "$attempt" != "6" ]]; then
+              sleep 20
+            fi
           done
 
           if [[ "$success" -eq 1 ]]; then
