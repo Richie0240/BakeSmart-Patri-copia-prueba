@@ -1,26 +1,28 @@
-name: Render Keep Alive
+name: Keep Render App Warm
 
 on:
   workflow_dispatch:
   schedule:
-    # Cada 5 minutos, evitando el minuto 0 porque GitHub puede atrasar o botar jobs con mucha carga.
-    - cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *"
+    # GitHub Actions schedules are best-effort. Running off minute 0 helps avoid the busiest queue.
+    - cron: "3,13,23,33,43,53 * * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: render-keepalive-bakesmart-patri
+  group: keep-render-app-warm
   cancel-in-progress: false
 
 jobs:
   keep-alive:
-    name: Ping Render app
+    name: Wake and warm Render app
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
 
     env:
       APP_URL: "https://bakesmart-patri.onrender.com"
+      PING_INTERVAL_SECONDS: "180"
+      PING_COUNT: "4"
 
     steps:
       - name: Show trigger info
@@ -30,34 +32,37 @@ jobs:
           echo "Branch: ${{ github.ref_name }}"
           echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S')"
 
-      - name: Ping Render app
+      - name: Keep Render app warm
         shell: bash
         run: |
           set -u
 
           success=0
 
-          for attempt in 1 2 3 4 5 6; do
-            echo "Attempt $attempt"
+          for attempt in $(seq 1 "$PING_COUNT"); do
+            echo ""
+            echo "Attempt $attempt/$PING_COUNT"
 
             code=$(curl -L -sS -o /tmp/render_body.html -w "%{http_code}" \
               --max-time 60 \
               --connect-timeout 20 \
-              --retry 2 \
+              --retry 3 \
+              --retry-all-errors \
               --retry-delay 5 \
               -A "GitHubActions-KeepAlive-BakeSmartPatri" \
               -H "Cache-Control: no-cache" \
-              "$APP_URL/?keepalive=$attempt-$(date +%s)" || echo "000")
+              -H "Pragma: no-cache" \
+              "$APP_URL/?keepalive=github-actions-$attempt-$(date +%s)" || echo "000")
 
             echo "HTTP code: $code"
-            head -n 8 /tmp/render_body.html || true
+            head -n 12 /tmp/render_body.html 2>/dev/null || true
 
             if [[ "$code" =~ ^(2|3)[0-9][0-9]$ ]]; then
               success=1
             fi
 
-            if [[ "$attempt" != "6" ]]; then
-              sleep 20
+            if [[ "$attempt" != "$PING_COUNT" ]]; then
+              sleep "$PING_INTERVAL_SECONDS"
             fi
           done
 
