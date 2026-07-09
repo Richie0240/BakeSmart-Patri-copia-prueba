@@ -371,7 +371,13 @@
           const product = products.find(row => Number(row.id) === Number(item.productId));
           return sum + Number(product?.price || 0) * Number(item.quantity || 0);
         }, 0);
-        const discountRate = Math.min(Math.max(Number(input.discountRate || 0), 0), 1);
+        const customer = api.customers.list().find(row =>
+          (input.customerEmail && String(row.email || "").toLowerCase() === String(input.customerEmail).toLowerCase()) ||
+          (input.customerName && String(row.fullName || "").toLowerCase() === String(input.customerName).toLowerCase())
+        );
+        const manualDiscountRate = Math.min(Math.max(Number(input.discountRate || 0), 0), 1);
+        const frequentDiscountRate = customer?.frequent ? Number(api.pos.config().frequentCustomerDiscount || 0) : 0;
+        const discountRate = Math.max(manualDiscountRate, frequentDiscountRate);
         const taxRate = Number(api.pos.config().iva || 0);
         const discountedSubtotal = Math.max(0, subtotal - subtotal * discountRate);
         const tax = discountedSubtotal * taxRate;

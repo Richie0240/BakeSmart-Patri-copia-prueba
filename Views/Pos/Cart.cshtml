@@ -101,11 +101,27 @@
                     .join('');
             }
 
+            function currentDiscountRate() {
+                const manual = Math.min(Math.max(Number(form.discountRate?.value || 0), 0), 1);
+                const customer = store.customers.list().find(row =>
+                    (form.customerEmail.value && String(row.email || '').toLowerCase() === String(form.customerEmail.value).toLowerCase()) ||
+                    (form.customerName.value && String(row.fullName || '').toLowerCase() === String(form.customerName.value).toLowerCase())
+                );
+                const frequent = customer?.frequent ? Number(store.pos.config().frequentCustomerDiscount || 0) : 0;
+                return Math.max(manual, frequent);
+            }
+
+            function remainingStock(productId) {
+                const product = store.inventory.list().find(row => Number(row.id) === Number(productId));
+                const item = cart.find(row => Number(row.productId) === Number(productId));
+                return Math.max(0, Number(product?.stock || 0) - Number(item?.quantity || 0));
+            }
+
             function renderCart() {
                 countEl.textContent = `${cart.length} producto${cart.length === 1 ? '' : 's'}`;
 
                 if (!cart.length) {
-                    itemsEl.innerHTML = `<div class="pos-cart-mini-empty"><i class="fas fa-basket-shopping"></i><strong>Carrito vacío</strong><span>Vuelva al POS para agregar productos.</span></div>`;
+                    itemsEl.innerHTML = `<div class="pos-cart-mini-empty"><i class="fas fa-basket-shopping"></i><strong>Carrito vacio</strong><span>Vuelva al POS para agregar productos.</span></div>`;
                     totalsEl.innerHTML = '';
                     return;
                 }
@@ -133,10 +149,14 @@
                 `).join('');
 
                 const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-                const tax = subtotal * Number(store.pos.config().iva || 0);
-                const total = subtotal + tax;
+                const discountRate = currentDiscountRate();
+                const discount = subtotal * discountRate;
+                const discountedSubtotal = Math.max(0, subtotal - discount);
+                const tax = discountedSubtotal * Number(store.pos.config().iva || 0);
+                const total = discountedSubtotal + tax;
                 totalsEl.innerHTML = `
                     <div class="pos-total-row"><span>Subtotal</span><strong>${fmt(subtotal)}</strong></div>
+                    ${discount > 0 ? `<div class="pos-total-row"><span>Descuento ${Math.round(discountRate * 100)}%</span><strong>-${fmt(discount)}</strong></div>` : ''}
                     <div class="pos-total-row"><span>IVA</span><strong>${fmt(tax)}</strong></div>
                     <div class="hr"></div>
                     <div class="pos-total-row total-final"><span>Total</span><strong>${fmt(total)}</strong></div>
@@ -156,12 +176,6 @@
                 renderCart();
             };
 
-            function remainingStock(productId) {
-                const product = store.inventory.list().find(row => Number(row.id) === Number(productId));
-                const item = cart.find(row => Number(row.productId) === Number(productId));
-                return Math.max(0, Number(product?.stock || 0) - Number(item?.quantity || 0));
-            }
-
             window.removeCheckoutItem = (productId) => {
                 cart = cart.filter(row => Number(row.productId) !== Number(productId));
                 saveCart();
@@ -175,7 +189,11 @@
                 if (!selected) return;
                 form.customerEmail.value = selected.email || '';
                 form.customerPhone.value = selected.phone || '';
+                renderCart();
             });
+
+            form.discountRate.addEventListener('input', renderCart);
+            form.customerEmail.addEventListener('input', renderCart);
 
             form.addEventListener('submit', async event => {
                 event.preventDefault();

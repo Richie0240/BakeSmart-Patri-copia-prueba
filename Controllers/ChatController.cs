@@ -1,62 +1,110 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using BakeSmartPatri.Data;
+using Microsoft.AspNetCore.Mvc;
 using System.Text;
 using System.Text.Json;
 
-namespace BakeSmartPatri.Controllers
+namespace BakeSmartPatri.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ChatController : ControllerBase
 {
+    private readonly HttpClient _http;
+    private readonly IConfiguration _config;
+    private readonly SqlStore _sqlStore;
 
-
-    [ApiController]
-    [Route("api/[controller]")]
-    public class ChatController : ControllerBase
+    public ChatController(IHttpClientFactory httpClientFactory, IConfiguration config, SqlStore sqlStore)
     {
-        private readonly HttpClient _http;
-        private readonly IConfiguration _config;
+        _http = httpClientFactory.CreateClient();
+        _config = config;
+        _sqlStore = sqlStore;
+    }
 
-        public ChatController(IHttpClientFactory httpClientFactory, IConfiguration config)
+    public sealed record ChatRequest(string Message);
+
+    [HttpPost]
+    public async Task<IActionResult> Post([FromBody] ChatRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Message))
+            return BadRequest(new { message = "Escriba un mensaje para el asistente." });
+
+        var apiKey = _config["Groq:ApiKey"] ?? _config["GROQ_API_KEY"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return BadRequest(new { message = "Falta configurar la API key del bot." });
+
+        var databaseContext = await BuildDatabaseContextAsync();
+        var systemPrompt = $"""
+            Sos Richie, el asistente virtual de BakeSmart Patri, una pasteleria/reposteria en Costa Rica.
+            Hablas en tono cercano, calido y con un toque tico, pero profesional.
+            Te presentas como Richie la primera vez que alguien te escribe.
+            No inventes precios ni productos especificos si no te los dan en el contexto.
+            Si te preguntan algo que no sabes, indica que pueden revisar el catalogo en la web o contactar a la tienda.
+            Manten las respuestas cortas, maximo 3-4 lineas.
+
+            {databaseContext}
+            """;
+
+        var body = new
         {
-            _http = httpClientFactory.CreateClient();
-            _config = config;
-        }
-
-        public record ChatRequest(string Message);
-
-        [HttpPost]
-        public async Task<IActionResult> Post([FromBody] ChatRequest req)
-        {
-            var apiKey = _config["Groq:ApiKey"];
-
-            var body = new
+            model = "llama-3.3-70b-versatile",
+            messages = new[]
             {
-                model = "llama-3.3-70b-versatile",
-                messages = new[]
-                {
-                new { role = "system", content = @" Sos Richie, el asistente virtual de BakeSmart Patri, una pastelería/repostería en Costa Rica.
-                Hablás en tono cercano, cálido y con un toque tico, pero profesional.
-                Te presentás como Richie la primera vez que alguien te escribe.
-                No inventés precios ni productos específicos si no te los dan en el contexto.
-                Si te preguntan algo que no sabés, decí que van a poder revisar el catálogo en la web o contactar a la tienda.
-                Mantené las respuestas cortas, máximo 3-4 líneas.
-                " },
+                new { role = "system", content = systemPrompt },
                 new { role = "user", content = req.Message }
             }
-            };
+        };
 
-            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
-            request.Headers.Add("Authorization", $"Bearer {apiKey}");
-            request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
+        request.Headers.Add("Authorization", $"Bearer {apiKey}");
+        request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-            var response = await _http.SendAsync(request);
-            var json = await response.Content.ReadAsStringAsync();
+        var response = await _http.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            return StatusCode((int)response.StatusCode, new { message = "El servicio del bot no respondio correctamente." });
 
-            using var doc = JsonDocument.Parse(json);
-            var reply = doc.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
+        using var doc = JsonDocument.Parse(json);
+        var reply = doc.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString();
 
-            return Ok(new { reply });
+        return Ok(new { reply });
+    }
+
+    private async Task<string> BuildDatabaseContextAsync()
+    {
+        var enabledText = _config["Bot:UseDatabase"] ?? _config["BOT_USE_DATABASE"];
+        var useDatabase = bool.TryParse(enabledText, out var enabled) && enabled;
+        if (!useDatabase)
+            return "Contexto de base de datos desactivado por configuracion.";
+
+        try
+        {
+            var categoriesTask = _sqlStore.CatalogCategoriesAsync();
+            var productsTask = _sqlStore.CatalogProductsAsync();
+            await Task.WhenAll(categoriesTask, productsTask);
+
+            var categories = (await categoriesTask)
+                .Take(10)
+                .Select(category => category.Name);
+
+            var products = (await productsTask)
+                .Where(product => product.IsActive && product.Stock > 0)
+                .Take(12)
+                .Select(product => $"{product.Name} ({product.Category}) - {product.UnitPrice:C0} - stock {product.Stock}");
+
+            return $"""
+                Contexto disponible desde la base:
+                Categorias: {string.Join(", ", categories)}.
+                Productos activos: {string.Join("; ", products)}.
+                Usa esta informacion solo como referencia actual del catalogo.
+                """;
+        }
+        catch
+        {
+            return "No se pudo leer la base de datos para el contexto del bot en este momento.";
         }
     }
 }

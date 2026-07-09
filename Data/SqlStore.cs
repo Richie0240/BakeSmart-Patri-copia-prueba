@@ -1819,7 +1819,8 @@ public sealed class SqlStore
                 ca.Label AS AddressLabel,
                 COALESCE(ca.AddressLine, u.AddressLine) AS DefaultAddressLine,
                 ca.Latitude,
-                ca.Longitude
+                ca.Longitude,
+                COALESCE(c.IsFrequent, 0) AS IsFrequent
             FROM dbo.Usuarios u
             INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
             LEFT JOIN dbo.Clientes c ON c.UserId = u.UserId
@@ -1842,7 +1843,8 @@ public sealed class SqlStore
             reader.IsDBNull(reader.GetOrdinal("CustomerAddressId")) ? null : reader.GetInt32("CustomerAddressId"),
             reader.GetNullableString("AddressLabel") ?? "Principal",
             reader.GetNullableDecimal("Latitude"),
-            reader.GetNullableDecimal("Longitude")
+            reader.GetNullableDecimal("Longitude"),
+            reader.GetBoolean("IsFrequent")
         ), new SqlParameter("@Email", email));
 
         return rows.FirstOrDefault();
@@ -2091,6 +2093,19 @@ public sealed class SqlStore
             DECLARE @CashMethodId int = (SELECT PaymentMethodId FROM dbo.MetodosPago WHERE Name = @PaymentMethod);
             IF @CashMethodId IS NULL SELECT @CashMethodId = PaymentMethodId FROM dbo.MetodosPago WHERE Name = N'Pendiente';
 
+            DECLARE @FrequentDiscountRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'frequentCustomerDiscount') AS decimal(18,4));
+            DECLARE @TaxRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'iva') AS decimal(18,4));
+            IF @FrequentDiscountRate IS NULL SET @FrequentDiscountRate = 0;
+            IF @TaxRate IS NULL SET @TaxRate = 0.13;
+
+            DECLARE @EffectiveDiscount decimal(18,2) = 0;
+            IF EXISTS (SELECT 1 FROM dbo.Clientes WHERE CustomerId = @CustomerId AND IsFrequent = 1)
+                SET @EffectiveDiscount = ROUND(@Subtotal * @FrequentDiscountRate, 2);
+
+            DECLARE @DiscountedSubtotal decimal(18,2) = @Subtotal - @EffectiveDiscount;
+            DECLARE @EffectiveTax decimal(18,2) = ROUND(@DiscountedSubtotal * @TaxRate, 2);
+            DECLARE @EffectiveTotal decimal(18,2) = @DiscountedSubtotal + @EffectiveTax;
+
             INSERT INTO dbo.Pedidos
                 (CustomerId, CustomerAddressId, OrderChannelId, OrderStatusId, PaymentStatusId, PaymentMethodId,
                  Notes, Subtotal, Discount, Tax, Total, DeliveryDate,
@@ -2099,7 +2114,7 @@ public sealed class SqlStore
                  RouteMode, OriginLabel, DeliveryReference)
             VALUES
                 (@CustomerId, @ResolvedAddressId, @WebChannelId, @PendingStatusId, @PendingPaymentId, @CashMethodId,
-                 @Notes, @Subtotal, 0, @Tax, @Total, @DeliveryDate,
+                 @Notes, @Subtotal, @EffectiveDiscount, @EffectiveTax, @EffectiveTotal, @DeliveryDate,
                  @OriginLat, @OriginLng,
                  @DestLat, @DestLng, @DestLabel, N'Costa Rica',
                  CASE WHEN @DeliveryMethod = N'retiro' THEN N'pickup' ELSE N'ground' END, @OriginName, @DeliveryReference);
@@ -2310,6 +2325,23 @@ public sealed class SqlStore
             IF @ActiveSessionId IS NULL
                 THROW 50042, 'Debe abrir caja antes de confirmar ventas.', 1;
 
+            DECLARE @FrequentDiscountRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'frequentCustomerDiscount') AS decimal(18,4));
+            DECLARE @TaxRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'iva') AS decimal(18,4));
+            IF @FrequentDiscountRate IS NULL SET @FrequentDiscountRate = 0;
+            IF @TaxRate IS NULL SET @TaxRate = 0.13;
+
+            DECLARE @EffectiveDiscount decimal(18,2) = COALESCE(@Discount, 0);
+            IF EXISTS (SELECT 1 FROM dbo.Clientes WHERE CustomerId = @CustomerId AND IsFrequent = 1)
+            BEGIN
+                DECLARE @FrequentDiscount decimal(18,2) = ROUND(@Subtotal * @FrequentDiscountRate, 2);
+                IF @FrequentDiscount > @EffectiveDiscount SET @EffectiveDiscount = @FrequentDiscount;
+            END;
+
+            DECLARE @DiscountedSubtotal decimal(18,2) = @Subtotal - @EffectiveDiscount;
+            IF @DiscountedSubtotal < 0 SET @DiscountedSubtotal = 0;
+            DECLARE @EffectiveTax decimal(18,2) = ROUND(@DiscountedSubtotal * @TaxRate, 2);
+            DECLARE @EffectiveTotal decimal(18,2) = @DiscountedSubtotal + @EffectiveTax;
+
             -- Crear pedido (venta directa POS)
             INSERT INTO dbo.Pedidos
                 (CustomerId, OrderChannelId, OrderStatusId, PaymentStatusId, PaymentMethodId,
@@ -2319,7 +2351,7 @@ public sealed class SqlStore
                  RouteMode, OriginLabel, TrackingStep)
             VALUES
                 (@CustomerId, @PosChannelId, @DeliveredStatusId, @PaidStatusId, @PaymentMethodId,
-                 @Subtotal, NULLIF(@Discount, 0), @Tax, @Total, NULLIF(@Notes, N''), CAST(SYSUTCDATETIME() AS date),
+                 @Subtotal, @EffectiveDiscount, @EffectiveTax, @EffectiveTotal, NULLIF(@Notes, N''), CAST(SYSUTCDATETIME() AS date),
                  9.9142, -84.0734,
                  9.9142, -84.0734, N'Tienda BakeSmart', N'Costa Rica',
                  N'pickup', N'BakeSmart Patri', 6);
@@ -2345,13 +2377,13 @@ public sealed class SqlStore
 
             -- Crear venta
             INSERT INTO dbo.Ventas (OrderId, PaymentMethodId, Subtotal, Tax, Total, CreatedAt)
-            VALUES (@OrderId, @PaymentMethodId, @Subtotal, @Tax, @Total, SYSUTCDATETIME());
+            VALUES (@OrderId, @PaymentMethodId, @Subtotal, @EffectiveTax, @EffectiveTotal, SYSUTCDATETIME());
 
             DECLARE @SaleId int = SCOPE_IDENTITY();
 
             -- Asociar a sesión de caja activa
             INSERT INTO dbo.PagosSesionCaja (CashSessionId, SaleId, Amount)
-            VALUES (@ActiveSessionId, @SaleId, @Total);
+            VALUES (@ActiveSessionId, @SaleId, @EffectiveTotal);
 
             COMMIT TRAN;
             SELECT @OrderId;
@@ -2442,7 +2474,7 @@ public sealed class SqlStore
     public sealed record RegisterCustomerInput(string FirstName, string LastName, string Email, string? Phone, string? AddressLine, string Password);
     public sealed record UserInput(int? Id, string FirstName, string LastName, string Email, string? Phone, string? Address, string Role, string? Password);
     public sealed record ProfileInput(string FirstName, string LastName, string? Phone, string? Address, string? NewPassword, int? CustomerAddressId = null, string? AddressLabel = null, decimal? Latitude = null, decimal? Longitude = null);
-    public sealed record ProfileData(string FirstName, string LastName, string Email, string Phone, string Address, string Role, int? CustomerAddressId, string AddressLabel, decimal? Latitude, decimal? Longitude);
+    public sealed record ProfileData(string FirstName, string LastName, string Email, string Phone, string Address, string Role, int? CustomerAddressId, string AddressLabel, decimal? Latitude, decimal? Longitude, bool IsFrequent);
     public sealed record CustomerAddressData(int Id, string Label, string AddressLine, decimal? Latitude, decimal? Longitude, bool IsDefault);
     public sealed record InventoryProductInput(int? Id, string Code, string Description, string Type, string Unit, string Category, string? Subcategory, decimal Price, decimal Stock, decimal MinStock);
     public sealed record InventoryMovementInput(int ProductId, string Type, decimal Quantity, string? Note);

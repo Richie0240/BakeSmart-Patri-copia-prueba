@@ -5,7 +5,7 @@
     }
 
         .accounting-page,
-        .accounting-page * {
+        .accounting-page :not(table):not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td) {
             min-width: 0;
         }
 
@@ -128,13 +128,17 @@
         }
 
     .accounting-table-wrap {
+        display: block;
+        width: 100%;
         max-width: 100%;
         max-height: 560px;
-        overflow: auto;
+        overflow-x: auto;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .accounting-table {
-        width: 100%;
+        width: max-content;
         min-width: 1080px !important;
         margin: 0;
     }

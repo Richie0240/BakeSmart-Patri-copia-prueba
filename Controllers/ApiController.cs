@@ -232,6 +232,10 @@ public class ApiController : Controller
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("promotions/{id:int}/toggle")]
@@ -260,6 +264,10 @@ public class ApiController : Controller
             return Ok(new { ok = true, id });
         }
         catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
         }
@@ -506,6 +514,10 @@ public class ApiController : Controller
             return Ok(new { ok = true, id = orderId });
         }
         catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
         }

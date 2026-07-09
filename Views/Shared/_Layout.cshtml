@@ -35,8 +35,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@title - BakeSmart Patri | Repostería Inteligente</title>
-    <meta name="description" content="BakeSmart Patri - Sistema de gestión para reposterías. Pedidos, producción, inventario y más." />
+    <title>@title - BakeSmart Patri | Reposteria Inteligente</title>
+    <meta name="description" content="BakeSmart Patri - Sistema de gestion para reposterias. Pedidos, produccion, inventario y mas." />
     <link rel="icon" type="image/png" href="~/img/logo.png" asp-append-version="true" />
     <link rel="apple-touch-icon" href="~/img/logo.png" asp-append-version="true" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -578,7 +578,7 @@
         </div>
         <div id="chat-box"></div>
         <div id="chat-input-row">
-            <input id="chat-input" placeholder="Escribí tu mensaje..." />
+            <input id="chat-input" placeholder="Escribi tu mensaje..." />
             <button id="chat-send" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
         </div>
     </div>
@@ -594,7 +594,7 @@
         toggleBtn.addEventListener('click', () => {
         widget.classList.toggle('open');
         if (widget.classList.contains('open') && box.children.length === 0) {
-        addMsg('bot', '¡Hola! Soy Richie 🍰 ¿En qué te puedo ayudar hoy?');
+        addMsg('bot', 'Hola, soy Richie. En que te puedo ayudar hoy?');
         }
         });
 
@@ -612,7 +612,7 @@
         if (!msg) return;
         input.value = '';
         addMsg('user', msg);
-        const typingEl = addMsg('typing', 'Richie está escribiendo...');
+        const typingEl = addMsg('typing', 'Richie esta escribiendo...');
 
         try {
         const res = await fetch('/api/chat', {
@@ -625,7 +625,7 @@
         addMsg('bot', data.reply);
         } catch (err) {
         typingEl.remove();
-        addMsg('bot', 'Uy, tuve un problema para responder. Probá de nuevo en un momento.');
+        addMsg('bot', 'Uy, tuve un problema para responder. Proba de nuevo en un momento.');
         }
         }
 
@@ -635,3 +635,4 @@
     </script>
 </body>
 </html>
+
