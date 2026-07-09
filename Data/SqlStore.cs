@@ -1820,7 +1820,7 @@ public sealed class SqlStore
                 COALESCE(ca.AddressLine, u.AddressLine) AS DefaultAddressLine,
                 ca.Latitude,
                 ca.Longitude,
-                COALESCE(c.IsFrequent, 0) AS IsFrequent
+                CAST(COALESCE(c.IsFrequent, 0) AS bit) AS IsFrequent
             FROM dbo.Usuarios u
             INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
             LEFT JOIN dbo.Clientes c ON c.UserId = u.UserId

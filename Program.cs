@@ -41,7 +41,6 @@ builder.Services
     .SetApplicationName("BakeSmartPatri");
 
 builder.Services.AddControllersWithViews();
-builder.Services.AddOutputCache();
 builder.Services.AddHttpClient();
 builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
 builder.Services.AddScoped<SqlStore>();
@@ -114,7 +113,6 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseOutputCache();
 
 
 app.MapControllerRoute(
