@@ -2,7 +2,6 @@
     display: flex;
     flex-direction: column;
     gap: 1.15rem;
-    transition: opacity .18s ease, transform .18s ease;
 }
 
 .client-dashboard-page,
@@ -11,8 +10,8 @@
 }
 
 .client-dashboard-page--loading {
-    opacity: .01;
-    transform: translateY(8px);
+    opacity: 1;
+    transform: none;
 }
 
 .client-dashboard-page--ready {
@@ -200,7 +199,7 @@
 
 .quick-order {
     display: grid;
-    grid-template-columns: minmax(300px, .78fr) minmax(360px, 1fr) minmax(280px, .55fr);
+    grid-template-columns: minmax(320px, .82fr) minmax(420px, 1fr);
     gap: 1rem;
     align-items: start;
 }
@@ -252,7 +251,7 @@
 .quick-products {
     display: grid;
     gap: .55rem;
-    max-height: 430px;
+    max-height: 360px;
     overflow: auto;
     padding-right: .2rem;
 }
@@ -404,10 +403,12 @@
 }
 
 .quick-summary {
-    position: sticky;
-    top: 96px;
+    grid-column: 1 / -1;
+    position: static;
     display: grid;
+    grid-template-columns: minmax(220px, .8fr) minmax(260px, 1fr) minmax(220px, .7fr);
     gap: 1rem;
+    align-items: center;
     padding: 1rem;
     border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
     border-radius: 8px;
@@ -441,6 +442,7 @@
 
 .quick-submit {
     width: 100%;
+    min-height: 52px;
 }
 
 .client-orders-list {
@@ -646,12 +648,11 @@ html.dark-start .payment-modal__close {
 
 @media (max-width: 1320px) {
     .quick-order {
-        grid-template-columns: minmax(280px, .8fr) minmax(0, 1fr);
+        grid-template-columns: minmax(280px, .85fr) minmax(0, 1fr);
     }
 
     .quick-summary {
-        grid-column: 1 / -1;
-        position: static;
+        grid-template-columns: 1fr;
     }
 }
 

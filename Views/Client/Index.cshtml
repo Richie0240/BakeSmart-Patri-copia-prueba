@@ -621,14 +621,15 @@
 
                 const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
                 form.deliveryDate.value = tomorrow;
+                showPage();
 
-                await loadProducts();
-                await loadProfile();
+                await Promise.all([
+                    loadProducts(),
+                    loadProfile()
+                ]);
                 toggleQuickDelivery();
                 renderSummary();
                 updateSummary();
-
-                requestAnimationFrame(showPage);
             }
 
             app.page.ready(() => initializePage());
