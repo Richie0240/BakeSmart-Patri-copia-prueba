@@ -80,6 +80,9 @@ public sealed class SqlStore
                 COALESCE(ca.AddressLine, o.DestinationLabel) AS Address,
                 o.DestinationLatitude,
                 o.DestinationLongitude,
+                o.CurrentLatitude,
+                o.CurrentLongitude,
+                o.TrackingStep,
                 STRING_AGG(CONCAT(oi.Quantity, ' x ', p.Name), ', ') AS Products
             FROM dbo.Pedidos o
             INNER JOIN dbo.Clientes c ON c.CustomerId = o.CustomerId
@@ -92,7 +95,8 @@ public sealed class SqlStore
             INNER JOIN dbo.Productos p ON p.ProductId = oi.ProductId
             WHERE (@CustomerEmail IS NULL OR c.Email = @CustomerEmail)
             GROUP BY o.OrderId, c.FullName, c.Email, os.Name, o.DeliveryDate, o.Total, oc.Name, ps.Name, pm.Name,
-                     ca.AddressLine, o.DestinationLabel, o.DestinationLatitude, o.DestinationLongitude, o.CreatedAt
+                     ca.AddressLine, o.DestinationLabel, o.DestinationLatitude, o.DestinationLongitude,
+                     o.CurrentLatitude, o.CurrentLongitude, o.TrackingStep, o.CreatedAt
             ORDER BY o.CreatedAt DESC;
             """;
 
@@ -110,7 +114,16 @@ public sealed class SqlStore
             paymentMethod = reader.GetString("PaymentMethod"),
             address = reader.GetString("Address"),
             destinationLat = reader.GetDecimal("DestinationLatitude"),
-            destinationLng = reader.GetDecimal("DestinationLongitude")
+            destinationLng = reader.GetDecimal("DestinationLongitude"),
+            tracking = new
+            {
+                currentLat = reader.GetDecimal("CurrentLatitude"),
+                currentLng = reader.GetDecimal("CurrentLongitude"),
+                destinationLat = reader.GetDecimal("DestinationLatitude"),
+                destinationLng = reader.GetDecimal("DestinationLongitude"),
+                currentStep = reader.GetInt32("TrackingStep"),
+                steps = new[] { "Pendiente pago", "Confirmado", "En produccion", "Listo", "En camino", "Entregado" }
+            }
         }, new SqlParameter("@CustomerEmail", string.IsNullOrWhiteSpace(customerEmail) ? DBNull.Value : customerEmail.Trim().ToLowerInvariant()));
     }
 
@@ -160,13 +173,13 @@ public sealed class SqlStore
 
     public async Task<int> SaveInventoryProductAsync(InventoryProductInput input, string? userEmail = null)
     {
-        // Validar duplicado de código
+        // Validar duplicado de cÃ³digo
         var existingCode = input.Id is null
             ? await CodeExistsAsync(input.Code.Trim())
             : await CodeExistsExcludingAsync(input.Code.Trim(), input.Id.Value);
 
         if (existingCode)
-            throw new InvalidOperationException($"Ya existe un producto con el código '{input.Code.Trim()}'.");
+            throw new InvalidOperationException($"Ya existe un producto con el cÃ³digo '{input.Code.Trim()}'.");
 
         var typeId = await EnsureProductTypeAsync(input.Type);
         var unitId = await EnsureUnitMeasureAsync(input.Unit);
@@ -912,12 +925,25 @@ public sealed class SqlStore
         {
             iva = setting("iva", 0.13m),
             frequentCustomerDiscount = setting("frequentCustomerDiscount", 0.05m),
+            activePromotionDiscount = await ActivePromotionDiscountAsync(),
             originName = settingText("originName", "BakeSmart Patri"),
             originAddress = settingText("originAddress", "San Jose, Costa Rica"),
             originLatitude = setting("originLatitude", 9.9142m),
             originLongitude = setting("originLongitude", -84.0734m),
             paymentMethods = methods
         };
+    }
+
+    private async Task<decimal> ActivePromotionDiscountAsync()
+    {
+        const string sql = """
+            SELECT COALESCE(MAX(DiscountRate), 0)
+            FROM dbo.Promociones
+            WHERE IsActive = 1
+              AND CAST(SYSUTCDATETIME() AS date) BETWEEN StartDate AND EndDate;
+            """;
+
+        return Convert.ToDecimal(await ScalarAsync(sql) ?? 0m);
     }
 
     public async Task<IReadOnlyList<object>> InventoryMovementsAsync()
@@ -1096,16 +1122,34 @@ public sealed class SqlStore
                 );
             END;
 
+            IF OBJECT_ID(N'dbo.ComunicacionesMarketingDestinatarios', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.ComunicacionesMarketingDestinatarios
+                (
+                    CommunicationRecipientId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    CommunicationId int NOT NULL,
+                    CustomerId int NOT NULL,
+                    CreatedAt datetime2 NOT NULL
+                );
+            END;
+
             INSERT INTO dbo.ComunicacionesMarketing (Subject, Message, RecipientCount, CreatedAt)
             VALUES (@Subject, @Message, @RecipientCount, SYSUTCDATETIME());
+            DECLARE @CommunicationId int = SCOPE_IDENTITY();
 
-            SELECT CONVERT(int, SCOPE_IDENTITY());
+            INSERT INTO dbo.ComunicacionesMarketingDestinatarios (CommunicationId, CustomerId, CreatedAt)
+            SELECT @CommunicationId, value, SYSUTCDATETIME()
+            FROM OPENJSON(@RecipientsJson)
+            WHERE EXISTS (SELECT 1 FROM dbo.Clientes WHERE CustomerId = value);
+
+            SELECT @CommunicationId;
             """;
 
         var id = Convert.ToInt32(await ScalarAsync(sql,
             new SqlParameter("@Subject", string.IsNullOrWhiteSpace(input.Subject) ? "Promocion BakeSmart" : input.Subject.Trim()),
             new SqlParameter("@Message", input.Message.Trim()),
-            new SqlParameter("@RecipientCount", input.CustomerIds.Count)));
+            new SqlParameter("@RecipientCount", input.CustomerIds.Count),
+            new SqlParameter("@RecipientsJson", System.Text.Json.JsonSerializer.Serialize(input.CustomerIds))));
 
         await AddAuditLogAsync("COMUNICACION_MARKETING", $"Campana #{id} enviada a {input.CustomerIds.Count} clientes", userEmail);
         return id;
@@ -1131,13 +1175,13 @@ public sealed class SqlStore
             UPDATE o
             SET OrderStatusId = os.OrderStatusId
             FROM dbo.Pedidos o
-            INNER JOIN dbo.EstadosPedido os ON os.Name = @Status OR REPLACE(os.Name, N'ó', N'o') = REPLACE(@Status, N'ó', N'o')
+            INNER JOIN dbo.EstadosPedido os ON os.Name COLLATE Latin1_General_CI_AI = @Status COLLATE Latin1_General_CI_AI
             WHERE o.OrderId = @OrderId;
 
             INSERT INTO dbo.EventosSeguimientoPedido (OrderId, OrderStatusId, Detail, CreatedAt)
             SELECT @OrderId, os.OrderStatusId, CONCAT(N'Estado actualizado a ', os.Name), SYSUTCDATETIME()
             FROM dbo.EstadosPedido os
-            WHERE os.Name = @Status OR REPLACE(os.Name, N'ó', N'o') = REPLACE(@Status, N'ó', N'o');
+            WHERE os.Name COLLATE Latin1_General_CI_AI = @Status COLLATE Latin1_General_CI_AI;
             """;
 
         await ExecuteAsync(sql,
@@ -1151,6 +1195,9 @@ public sealed class SqlStore
     public async Task MarkOrderPaidAsync(int orderId, string method, string? userEmail = null)
     {
         const string sql = """
+            SET XACT_ABORT ON;
+            BEGIN TRAN;
+
             DECLARE @PaymentMethodId int = (SELECT PaymentMethodId FROM dbo.MetodosPago WHERE Name = @Method);
             IF @PaymentMethodId IS NULL
                 SELECT @PaymentMethodId = PaymentMethodId FROM dbo.MetodosPago WHERE Name = N'Tarjeta';
@@ -1177,6 +1224,50 @@ public sealed class SqlStore
             INSERT INTO dbo.EventosSeguimientoPedido (OrderId, OrderStatusId, Detail, CreatedAt)
             SELECT @OrderId, @ConfirmedStatusId, N'Pago confirmado; pedido enviado a produccion', SYSUTCDATETIME()
             WHERE @Updated > 0 AND @ConfirmedStatusId IS NOT NULL;
+
+            IF @Updated = 0
+                THROW 50061, 'El pedido no existe.', 1;
+
+            DECLARE @SaleId int = (SELECT TOP 1 SaleId FROM dbo.Ventas WHERE OrderId = @OrderId);
+            IF @SaleId IS NULL
+            BEGIN
+                DECLARE @Subtotal decimal(18,2), @Tax decimal(18,2), @Total decimal(18,2);
+                SELECT @Subtotal = Subtotal, @Tax = Tax, @Total = Total
+                FROM dbo.Pedidos
+                WHERE OrderId = @OrderId;
+
+                INSERT INTO dbo.Ventas (OrderId, PaymentMethodId, Subtotal, Tax, Total, CreatedAt)
+                VALUES (@OrderId, @PaymentMethodId, @Subtotal, @Tax, @Total, SYSUTCDATETIME());
+                SET @SaleId = SCOPE_IDENTITY();
+
+                DECLARE @CashAccountId int;
+                DECLARE @IncomeAccountId int;
+
+                SELECT @CashAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'1-02';
+                IF @CashAccountId IS NULL
+                BEGIN
+                    INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                    VALUES (N'1-02', N'Banco / SINPE / Tarjeta', N'ACTIVO');
+                    SET @CashAccountId = SCOPE_IDENTITY();
+                END;
+
+                SELECT @IncomeAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'4-01';
+                IF @IncomeAccountId IS NULL
+                BEGIN
+                    INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                    VALUES (N'4-01', N'Ingresos por ventas', N'INGRESO');
+                    SET @IncomeAccountId = SCOPE_IDENTITY();
+                END;
+
+                INSERT INTO dbo.AsientosContables (EntryType, ReferenceTable, ReferenceId, Note, CreatedAt)
+                VALUES (N'VENTA', N'Ventas', @SaleId, CONCAT(N'Pago web pedido #', @OrderId), SYSUTCDATETIME());
+                DECLARE @EntryId int = SCOPE_IDENTITY();
+
+                INSERT INTO dbo.LineasAsientoContable (AccountingEntryId, AccountId, Debit, Credit)
+                VALUES (@EntryId, @CashAccountId, @Total, 0), (@EntryId, @IncomeAccountId, 0, @Total);
+            END;
+
+            COMMIT TRAN;
             """;
 
         await ExecuteAsync(sql,
@@ -1364,9 +1455,61 @@ public sealed class SqlStore
     public async Task<object> ReconcilePosAsync(string? userEmail = null)
     {
         const string sql = """
+            DECLARE @CashAccountId int;
+            DECLARE @IncomeAccountId int;
+
+            SELECT @CashAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'1-02';
+            IF @CashAccountId IS NULL
+            BEGIN
+                INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                VALUES (N'1-02', N'Banco / SINPE / Tarjeta', N'ACTIVO');
+                SET @CashAccountId = SCOPE_IDENTITY();
+            END;
+
+            SELECT @IncomeAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'4-01';
+            IF @IncomeAccountId IS NULL
+            BEGIN
+                INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                VALUES (N'4-01', N'Ingresos por ventas', N'INGRESO');
+                SET @IncomeAccountId = SCOPE_IDENTITY();
+            END;
+
+            DECLARE @Missing TABLE (SaleId int NOT NULL, Total decimal(18,2) NOT NULL);
+
+            INSERT INTO @Missing (SaleId, Total)
+            SELECT v.SaleId, v.Total
+            FROM dbo.Ventas v
+            LEFT JOIN dbo.AsientosContables e ON e.ReferenceTable = N'Ventas' AND e.ReferenceId = v.SaleId
+            WHERE e.AccountingEntryId IS NULL;
+
+            DECLARE @SaleId int;
+            DECLARE @Total decimal(18,2);
+
+            DECLARE missing_cursor CURSOR LOCAL FAST_FORWARD FOR
+                SELECT SaleId, Total FROM @Missing;
+
+            OPEN missing_cursor;
+            FETCH NEXT FROM missing_cursor INTO @SaleId, @Total;
+
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                INSERT INTO dbo.AsientosContables (EntryType, ReferenceTable, ReferenceId, Note, CreatedAt)
+                VALUES (N'VENTA', N'Ventas', @SaleId, CONCAT(N'Asiento generado por conciliacion POS venta #', @SaleId), SYSUTCDATETIME());
+
+                DECLARE @EntryId int = SCOPE_IDENTITY();
+
+                INSERT INTO dbo.LineasAsientoContable (AccountingEntryId, AccountId, Debit, Credit)
+                VALUES (@EntryId, @CashAccountId, @Total, 0), (@EntryId, @IncomeAccountId, 0, @Total);
+
+                FETCH NEXT FROM missing_cursor INTO @SaleId, @Total;
+            END;
+
+            CLOSE missing_cursor;
+            DEALLOCATE missing_cursor;
+
             SELECT
                 COUNT(1) AS Reviewed,
-                SUM(CASE WHEN e.AccountingEntryId IS NULL THEN 1 ELSE 0 END) AS Issues
+                COALESCE(SUM(CASE WHEN e.AccountingEntryId IS NULL THEN 1 ELSE 0 END), 0) AS Issues
             FROM dbo.Ventas v
             LEFT JOIN dbo.AsientosContables e ON e.ReferenceTable = N'Ventas' AND e.ReferenceId = v.SaleId;
             """;
@@ -1382,7 +1525,14 @@ public sealed class SqlStore
     }
 
     public async Task<object> DailyAccountingCloseAsync(string? userEmail = null)
+        => await AccountingCloseAsync("DIARIO", userEmail);
+
+    public async Task<object> AccountingCloseAsync(string closeType, string? userEmail = null)
     {
+        var normalizedType = RemoveDiacritics(string.IsNullOrWhiteSpace(closeType) ? "DIARIO" : closeType.Trim()).ToUpperInvariant();
+        if (normalizedType is not ("DIARIO" or "SEMANAL" or "MENSUAL"))
+            throw new InvalidOperationException("Tipo de cierre no valido.");
+
         const string sql = """
             IF OBJECT_ID(N'dbo.CierresContables', N'U') IS NULL
             BEGIN
@@ -1400,19 +1550,24 @@ public sealed class SqlStore
             END;
 
             DECLARE @Today date = CAST(SYSUTCDATETIME() AS date);
-            DECLARE @Sales decimal(18,2) = COALESCE((SELECT SUM(Total) FROM dbo.Ventas WHERE CAST(CreatedAt AS date) = @Today), 0);
-            DECLARE @Expenses decimal(18,2) = COALESCE((SELECT SUM(Amount) FROM dbo.Gastos WHERE CAST(CreatedAt AS date) = @Today), 0);
-            DECLARE @SupplierPayments decimal(18,2) = COALESCE((SELECT SUM(Amount) FROM dbo.PagosProveedor WHERE CAST(CreatedAt AS date) = @Today), 0);
+            DECLARE @Start date = CASE
+                WHEN @CloseType = N'SEMANAL' THEN DATEADD(day, -6, @Today)
+                WHEN @CloseType = N'MENSUAL' THEN DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1)
+                ELSE @Today
+            END;
+            DECLARE @Sales decimal(18,2) = COALESCE((SELECT SUM(Total) FROM dbo.Ventas WHERE CAST(CreatedAt AS date) BETWEEN @Start AND @Today), 0);
+            DECLARE @Expenses decimal(18,2) = COALESCE((SELECT SUM(Amount) FROM dbo.Gastos WHERE CAST(CreatedAt AS date) BETWEEN @Start AND @Today), 0);
+            DECLARE @SupplierPayments decimal(18,2) = COALESCE((SELECT SUM(Amount) FROM dbo.PagosProveedor WHERE CAST(CreatedAt AS date) BETWEEN @Start AND @Today), 0);
 
             INSERT INTO dbo.CierresContables (CloseType, PeriodStart, PeriodEnd, TotalSales, TotalExpenses, TotalSupplierPayments, CreatedAt)
-            VALUES (N'DIARIO', @Today, @Today, @Sales, @Expenses, @SupplierPayments, SYSUTCDATETIME());
+            VALUES (@CloseType, @Start, @Today, @Sales, @Expenses, @SupplierPayments, SYSUTCDATETIME());
 
             SELECT CONVERT(int, SCOPE_IDENTITY());
             """;
 
-        var id = Convert.ToInt32(await ScalarAsync(sql));
-        await AddAuditLogAsync("CIERRE_CONTABLE", $"Cierre contable diario #{id} generado", userEmail);
-        return new { closeId = id, count = 1 };
+        var id = Convert.ToInt32(await ScalarAsync(sql, new SqlParameter("@CloseType", normalizedType)));
+        await AddAuditLogAsync("CIERRE_CONTABLE", $"Cierre contable {normalizedType.ToLowerInvariant()} #{id} generado", userEmail);
+        return new { closeId = id, type = normalizedType, count = 1 };
     }
 
     public async Task<int> RegisterCreditNoteAsync(CreditNoteInput input, string? userEmail = null)
@@ -1442,6 +1597,8 @@ public sealed class SqlStore
             END;
 
             DECLARE @Amount decimal(18,2) = (SELECT Total FROM dbo.Ventas WHERE SaleId = @SaleId);
+            DECLARE @OrderId int = (SELECT OrderId FROM dbo.Ventas WHERE SaleId = @SaleId);
+            DECLARE @CancelledStatusId int = (SELECT OrderStatusId FROM dbo.EstadosPedido WHERE Name = N'Cancelado');
 
             INSERT INTO dbo.NotasCreditoPOS (SaleId, Reason, Amount, CreatedAt)
             VALUES (@SaleId, @Reason, @Amount, SYSUTCDATETIME());
@@ -1449,6 +1606,43 @@ public sealed class SqlStore
 
             UPDATE dbo.PagosSesionCaja SET Amount = 0 WHERE SaleId = @SaleId;
             UPDATE dbo.Ventas SET Subtotal = 0, Tax = 0, Total = 0 WHERE SaleId = @SaleId;
+            IF @CancelledStatusId IS NOT NULL
+            BEGIN
+                UPDATE dbo.Pedidos SET OrderStatusId = @CancelledStatusId WHERE OrderId = @OrderId;
+
+                INSERT INTO dbo.EventosSeguimientoPedido (OrderId, OrderStatusId, Detail, CreatedAt)
+                VALUES (@OrderId, @CancelledStatusId, CONCAT(N'Venta reversada por nota de credito: ', @Reason), SYSUTCDATETIME());
+            END;
+
+            DECLARE @InventoryLocationId int;
+            IF NOT EXISTS (SELECT 1 FROM dbo.UbicacionesInventario WHERE Name = N'Bodega principal')
+                INSERT INTO dbo.UbicacionesInventario (Name, Description)
+                VALUES (N'Bodega principal', N'Ubicacion principal de BakeSmart Patri');
+
+            SELECT @InventoryLocationId = InventoryLocationId
+            FROM dbo.UbicacionesInventario
+            WHERE Name = N'Bodega principal';
+
+            ;WITH Items AS (
+                SELECT ProductId, SUM(Quantity) AS Quantity
+                FROM dbo.DetallePedido
+                WHERE OrderId = @OrderId
+                GROUP BY ProductId
+            )
+            MERGE dbo.ExistenciasInventario AS target
+            USING Items AS source
+            ON target.ProductId = source.ProductId AND target.InventoryLocationId = @InventoryLocationId
+            WHEN MATCHED THEN
+                UPDATE SET Quantity = target.Quantity + source.Quantity, UpdatedAt = SYSUTCDATETIME()
+            WHEN NOT MATCHED THEN
+                INSERT (ProductId, InventoryLocationId, Quantity)
+                VALUES (source.ProductId, @InventoryLocationId, source.Quantity);
+
+            INSERT INTO dbo.MovimientosInventario (ProductId, InventoryLocationId, MovementType, Quantity, Note, CreatedAt)
+            SELECT ProductId, @InventoryLocationId, N'ENTRADA', SUM(Quantity), CONCAT(N'Reversion nota credito venta #', @SaleId), SYSUTCDATETIME()
+            FROM dbo.DetallePedido
+            WHERE OrderId = @OrderId
+            GROUP BY ProductId;
 
             DECLARE @AccountId int = (SELECT TOP 1 AccountId FROM dbo.CatalogoCuentas ORDER BY AccountId);
             INSERT INTO dbo.AsientosContables (EntryType, ReferenceTable, ReferenceId, Note, CreatedAt)
@@ -1957,8 +2151,8 @@ public sealed class SqlStore
         if (exists == 0)
             return false;
 
-        // En un entorno real, aquí se enviaría un email con un token.
-        // Por ahora, generamos una contraseña temporal y la registramos en bitácora.
+        // En un entorno real, aquÃ­ se enviarÃ­a un email con un token.
+        // Por ahora, generamos una contraseÃ±a temporal y la registramos en bitÃ¡cora.
         var tempPassword = $"Temp{Guid.NewGuid().ToString("N")[..8]}!";
         var hash = HashPassword(tempPassword);
 
@@ -2194,6 +2388,12 @@ public sealed class SqlStore
             IF @CashMethodId IS NULL SELECT @CashMethodId = PaymentMethodId FROM dbo.MetodosPago WHERE Name = N'Pendiente';
 
             DECLARE @FrequentDiscountRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'frequentCustomerDiscount') AS decimal(18,4));
+            DECLARE @PromotionDiscountRate decimal(18,4) = COALESCE((
+                SELECT MAX(DiscountRate)
+                FROM dbo.Promociones
+                WHERE IsActive = 1
+                  AND CAST(SYSUTCDATETIME() AS date) BETWEEN StartDate AND EndDate
+            ), 0);
             DECLARE @TaxRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'iva') AS decimal(18,4));
             IF @FrequentDiscountRate IS NULL SET @FrequentDiscountRate = 0;
             IF @TaxRate IS NULL SET @TaxRate = 0.13;
@@ -2201,6 +2401,8 @@ public sealed class SqlStore
             DECLARE @EffectiveDiscount decimal(18,2) = 0;
             IF EXISTS (SELECT 1 FROM dbo.Clientes WHERE CustomerId = @CustomerId AND IsFrequent = 1)
                 SET @EffectiveDiscount = ROUND(@Subtotal * @FrequentDiscountRate, 2);
+            DECLARE @PromotionDiscount decimal(18,2) = ROUND(@Subtotal * @PromotionDiscountRate, 2);
+            IF @PromotionDiscount > @EffectiveDiscount SET @EffectiveDiscount = @PromotionDiscount;
 
             DECLARE @DiscountedSubtotal decimal(18,2) = @Subtotal - @EffectiveDiscount;
             DECLARE @EffectiveTax decimal(18,2) = ROUND(@DiscountedSubtotal * @TaxRate, 2);
@@ -2266,7 +2468,7 @@ public sealed class SqlStore
 
     public async Task<int> OpenCashSessionAsync(decimal openingAmount, string? userEmail = null)
     {
-        // Verificar que no haya sesión activa
+        // Verificar que no haya sesiÃ³n activa
         const string checkSql = "SELECT COUNT(1) FROM dbo.SesionesCaja WHERE Status = N'Abierta'";
         var activeSessions = Convert.ToInt32(await ScalarAsync(checkSql));
         if (activeSessions > 0)
@@ -2287,25 +2489,33 @@ public sealed class SqlStore
             new SqlParameter("@UserEmail", (object?)userEmail ?? DBNull.Value),
             new SqlParameter("@Amount", openingAmount)));
 
-        await AddAuditLogAsync("APERTURA_CAJA", $"Sesion de caja #{sessionId} abierta con ₡{openingAmount:N0}", userEmail);
+        await AddAuditLogAsync("APERTURA_CAJA", $"Sesion de caja #{sessionId} abierta con â‚¡{openingAmount:N0}", userEmail);
         return sessionId;
     }
 
     public async Task CloseCashSessionAsync(int sessionId, decimal closingAmount, string? userEmail = null)
     {
         const string sql = """
+            DECLARE @Updated int = 0;
+
             UPDATE dbo.SesionesCaja
             SET ClosingAmount = @ClosingAmount,
                 Status = N'Cerrada',
                 ClosedAt = SYSUTCDATETIME()
             WHERE CashSessionId = @SessionId AND Status = N'Abierta';
+
+            SET @Updated = @@ROWCOUNT;
+            SELECT @Updated;
             """;
 
-        await ExecuteAsync(sql,
+        var updated = Convert.ToInt32(await ScalarAsync(sql,
             new SqlParameter("@SessionId", sessionId),
-            new SqlParameter("@ClosingAmount", closingAmount));
+            new SqlParameter("@ClosingAmount", closingAmount)));
 
-        await AddAuditLogAsync("CIERRE_CAJA", $"Sesion de caja #{sessionId} cerrada con ₡{closingAmount:N0}", userEmail);
+        if (updated == 0)
+            throw new InvalidOperationException("No se encontro una caja abierta para cerrar.");
+
+        await AddAuditLogAsync("CIERRE_CAJA", $"Sesion de caja #{sessionId} cerrada con â‚¡{closingAmount:N0}", userEmail);
     }
 
     public async Task<IReadOnlyList<object>> CashSessionsAsync()
@@ -2336,7 +2546,7 @@ public sealed class SqlStore
 
     public async Task<int> RegisterSaleAsync(SaleInput input, string? userEmail = null)
     {
-        // Serializar items a JSON para pasarlos como parámetro
+        // Serializar items a JSON para pasarlos como parÃ¡metro
         var itemsJson = System.Text.Json.JsonSerializer.Serialize(input.Items.Select(i => new
         {
             productId = i.ProductId,
@@ -2426,6 +2636,12 @@ public sealed class SqlStore
                 THROW 50042, 'Debe abrir caja antes de confirmar ventas.', 1;
 
             DECLARE @FrequentDiscountRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'frequentCustomerDiscount') AS decimal(18,4));
+            DECLARE @PromotionDiscountRate decimal(18,4) = COALESCE((
+                SELECT MAX(DiscountRate)
+                FROM dbo.Promociones
+                WHERE IsActive = 1
+                  AND CAST(SYSUTCDATETIME() AS date) BETWEEN StartDate AND EndDate
+            ), 0);
             DECLARE @TaxRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'iva') AS decimal(18,4));
             IF @FrequentDiscountRate IS NULL SET @FrequentDiscountRate = 0;
             IF @TaxRate IS NULL SET @TaxRate = 0.13;
@@ -2436,6 +2652,8 @@ public sealed class SqlStore
                 DECLARE @FrequentDiscount decimal(18,2) = ROUND(@Subtotal * @FrequentDiscountRate, 2);
                 IF @FrequentDiscount > @EffectiveDiscount SET @EffectiveDiscount = @FrequentDiscount;
             END;
+            DECLARE @PromotionDiscount decimal(18,2) = ROUND(@Subtotal * @PromotionDiscountRate, 2);
+            IF @PromotionDiscount > @EffectiveDiscount SET @EffectiveDiscount = @PromotionDiscount;
 
             DECLARE @DiscountedSubtotal decimal(18,2) = @Subtotal - @EffectiveDiscount;
             IF @DiscountedSubtotal < 0 SET @DiscountedSubtotal = 0;
@@ -2481,9 +2699,35 @@ public sealed class SqlStore
 
             DECLARE @SaleId int = SCOPE_IDENTITY();
 
-            -- Asociar a sesión de caja activa
+            -- Asociar a sesiÃ³n de caja activa
             INSERT INTO dbo.PagosSesionCaja (CashSessionId, SaleId, Amount)
             VALUES (@ActiveSessionId, @SaleId, @EffectiveTotal);
+
+            DECLARE @CashAccountId int;
+            DECLARE @IncomeAccountId int;
+
+            SELECT @CashAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'1-02';
+            IF @CashAccountId IS NULL
+            BEGIN
+                INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                VALUES (N'1-02', N'Banco / SINPE / Tarjeta', N'ACTIVO');
+                SET @CashAccountId = SCOPE_IDENTITY();
+            END;
+
+            SELECT @IncomeAccountId = AccountId FROM dbo.CatalogoCuentas WHERE AccountCode = N'4-01';
+            IF @IncomeAccountId IS NULL
+            BEGIN
+                INSERT INTO dbo.CatalogoCuentas (AccountCode, AccountName, AccountType)
+                VALUES (N'4-01', N'Ingresos por ventas', N'INGRESO');
+                SET @IncomeAccountId = SCOPE_IDENTITY();
+            END;
+
+            INSERT INTO dbo.AsientosContables (EntryType, ReferenceTable, ReferenceId, Note, CreatedAt)
+            VALUES (N'VENTA', N'Ventas', @SaleId, CONCAT(N'Venta POS pedido #', @OrderId), SYSUTCDATETIME());
+            DECLARE @EntryId int = SCOPE_IDENTITY();
+
+            INSERT INTO dbo.LineasAsientoContable (AccountingEntryId, AccountId, Debit, Credit)
+            VALUES (@EntryId, @CashAccountId, @EffectiveTotal, 0), (@EntryId, @IncomeAccountId, 0, @EffectiveTotal);
 
             COMMIT TRAN;
             SELECT @OrderId;
@@ -2501,7 +2745,7 @@ public sealed class SqlStore
             new SqlParameter("@Notes", (object?)input.Notes?.Trim() ?? DBNull.Value),
             new SqlParameter("@ItemsJson", itemsJson)));
 
-        await AddAuditLogAsync("VENTA_POS", $"Venta POS #{orderId} por ₡{input.Total:N0}", userEmail);
+        await AddAuditLogAsync("VENTA_POS", $"Venta POS #{orderId} por â‚¡{input.Total:N0}", userEmail);
         return orderId;
     }
 

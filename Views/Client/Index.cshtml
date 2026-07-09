@@ -451,7 +451,9 @@
                 const price = Number(selectedProduct?.price || 0);
                 const subtotal = price * quantity;
                 const taxRate = Number(BakeSmartStore.pos.config().iva || 0);
-                const discountRate = currentProfile?.isFrequent ? Number(BakeSmartStore.pos.config().frequentCustomerDiscount || 0) : 0;
+                const frequentRate = currentProfile?.isFrequent ? Number(BakeSmartStore.pos.config().frequentCustomerDiscount || 0) : 0;
+                const promotionRate = Number(BakeSmartStore.pos.config().activePromotionDiscount || 0);
+                const discountRate = Math.max(frequentRate, promotionRate);
                 const discount = subtotal * discountRate;
                 const discountedSubtotal = Math.max(0, subtotal - discount);
                 const tax = discountedSubtotal * taxRate;
@@ -568,7 +570,9 @@
 
                     const subtotal = Number(product.price) * quantity;
                     const taxRate = Number(BakeSmartStore.pos.config().iva || 0);
-                    const discountRate = currentProfile?.isFrequent ? Number(BakeSmartStore.pos.config().frequentCustomerDiscount || 0) : 0;
+                    const frequentRate = currentProfile?.isFrequent ? Number(BakeSmartStore.pos.config().frequentCustomerDiscount || 0) : 0;
+                    const promotionRate = Number(BakeSmartStore.pos.config().activePromotionDiscount || 0);
+                    const discountRate = Math.max(frequentRate, promotionRate);
                     const discount = subtotal * discountRate;
                     const discountedSubtotal = Math.max(0, subtotal - discount);
                     const tax = discountedSubtotal * taxRate;
