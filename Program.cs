@@ -22,6 +22,12 @@ builder.Configuration
     .AddJsonFile("appsettings.Azure.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -145,5 +151,7 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.MapGet("/ping", () => Results.Text("ok", "text/plain"));
 
 app.Run();
