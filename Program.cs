@@ -111,6 +111,20 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "";
+    var isStaticAsset = Path.HasExtension(path);
+    if (!isStaticAsset)
+    {
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers.Expires = "0";
+    }
+
+    await next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
