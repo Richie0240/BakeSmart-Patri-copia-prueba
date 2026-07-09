@@ -34,6 +34,7 @@ builder.Services
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddOutputCache();
+builder.Services.AddHttpClient();
 builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
 builder.Services.AddScoped<SqlStore>();
 builder.Services.AddHttpClient("Nominatim", client =>
