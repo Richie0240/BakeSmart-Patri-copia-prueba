@@ -91,6 +91,13 @@
 
   const api = {
     refresh: refreshAll,
+    refreshClient() {
+      return Promise.allSettled([
+        load("orders", "/api/orders"),
+        load("inventory", "/api/inventory"),
+        load("posConfig", "/api/pos/config", {})
+      ]);
+    },
     async refreshPos() {
       await loadPosSessions();
       window.dispatchEvent(new CustomEvent("bakesmart:data-ready", { detail: { key: "posSessions" } }));

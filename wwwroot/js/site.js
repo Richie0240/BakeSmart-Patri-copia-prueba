@@ -1107,52 +1107,55 @@
         _docListener: null,
 
         init() {
-            const toggle = document.getElementById('userMenuToggle');
-            const menu = document.getElementById('userMenu');
-            const dropdown = document.getElementById('userDropdown');
+            const menus = $$('.user-menu');
+            if (!menus.length) return;
 
-            if (!toggle || !menu || !dropdown) return;
+            menus.forEach(menu => {
+                const toggle = $('.user-profile', menu);
+                const dropdown = $('.user-dropdown', menu);
 
-            const self = this;
+                if (!toggle || !dropdown || menu.dataset.userMenuReady === 'true') return;
+                menu.dataset.userMenuReady = 'true';
 
-            const closeMenu = () => {
-                menu.classList.remove('user-menu-open');
-                dropdown.hidden = true;
-                toggle.setAttribute('aria-expanded', 'false');
-                self._detachDocListener();
-            };
+                const self = this;
 
-            const openMenu = () => {
-                menu.classList.add('user-menu-open');
-                dropdown.hidden = false;
-                toggle.setAttribute('aria-expanded', 'true');
-                self._attachDocListener(menu, closeMenu);
-            };
+                const closeMenu = () => {
+                    menu.classList.remove('user-menu-open');
+                    dropdown.hidden = true;
+                    toggle.setAttribute('aria-expanded', 'false');
+                    self._detachDocListener();
+                };
 
-            toggle.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
+                const openMenu = () => {
+                    menu.classList.add('user-menu-open');
+                    dropdown.hidden = false;
+                    toggle.setAttribute('aria-expanded', 'true');
+                    self._attachDocListener(menu, closeMenu);
+                };
 
-                const isOpen = menu.classList.contains('user-menu-open');
-                if (isOpen) {
-                    closeMenu();
-                } else {
-                    openMenu();
-                }
-            });
+                toggle.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
 
-            // Cerrar con Escape
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && menu.classList.contains('user-menu-open')) {
-                    closeMenu();
-                }
-            });
+                    const isOpen = menu.classList.contains('user-menu-open');
+                    if (isOpen) {
+                        closeMenu();
+                    } else {
+                        openMenu();
+                    }
+                });
 
-            // Cerrar al hacer clic en cualquier enlace o boton dentro del dropdown
-            dropdown.addEventListener('click', (event) => {
-                if (event.target.closest('a, button[type="submit"]')) {
-                    setTimeout(() => closeMenu(), 200);
-                }
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' && menu.classList.contains('user-menu-open')) {
+                        closeMenu();
+                    }
+                });
+
+                dropdown.addEventListener('click', (event) => {
+                    if (event.target.closest('a, button[type="submit"]')) {
+                        setTimeout(() => closeMenu(), 200);
+                    }
+                });
             });
         },
 

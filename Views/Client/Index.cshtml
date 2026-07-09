@@ -377,7 +377,7 @@
             }
 
             async function loadProducts() {
-                await BakeSmartStore.refresh();
+                await BakeSmartStore.refreshClient();
                 products = BakeSmartStore.inventory.list().map(normalizeProduct);
                 document.getElementById('clientAvailableProducts').textContent =
                     products.filter(product => product.active && isSellableProduct(product) && product.stock > 0).length;

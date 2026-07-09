@@ -155,8 +155,42 @@
                 <div class="storefront-tools">
                     @if (isAuth)
                     {
-                        <a href="/Account/Profile"><i class="far fa-user"></i><span>Mi cuenta</span></a>
-                        <a href="/Client/Orders"><i class="fas fa-box"></i><span>Pedidos</span></a>
+                        <div class="user-menu storefront-account" id="userMenu">
+                            <button type="button" class="storefront-account__toggle user-profile" id="userMenuToggle" aria-haspopup="true" aria-expanded="false">
+                                <span class="user-avatar">@userInitials</span>
+                                <span class="user-info">
+                                    <span class="user-name">@userName</span>
+                                    <span class="user-role">Cliente</span>
+                                </span>
+                                <span class="user-chevron"><i class="fas fa-chevron-down"></i></span>
+                            </button>
+
+                            <div class="user-dropdown storefront-account__menu" id="userDropdown" role="menu" hidden>
+                                <div class="user-dropdown-head">
+                                    <span class="user-avatar user-avatar-sm">@userInitials</span>
+                                    <span>
+                                        <strong>@userName</strong>
+                                        <small>Perfil de cliente</small>
+                                    </span>
+                                </div>
+                                <a class="user-dropdown-item" href="/Account/Profile" role="menuitem">
+                                    <i class="fas fa-user-pen"></i>
+                                    <span>Mi perfil</span>
+                                </a>
+                                <a class="user-dropdown-item" href="/Client/Orders" role="menuitem">
+                                    <i class="fas fa-box-open"></i>
+                                    <span>Mis pedidos</span>
+                                </a>
+                                <div class="user-dropdown-divider"></div>
+                                <form method="post" action="/Account/Logout" class="user-dropdown-form">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="user-dropdown-item user-dropdown-danger" role="menuitem">
+                                        <i class="fas fa-right-from-bracket"></i>
+                                        <span>Cerrar sesión</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     }
                     else
                     {
@@ -339,7 +373,7 @@
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="user-dropdown-item user-dropdown-danger" role="menuitem">
                                     <i class="fas fa-right-from-bracket"></i>
-                                    <span>Cerrar sesion</span>
+                                    <span>Cerrar sesión</span>
                                 </button>
                             </form>
                         </div>
@@ -562,6 +596,27 @@
         padding: 0 14px;
         cursor: pointer;
         font-size: 18px;
+        }
+
+        body[data-page^="/pos"] #chat-toggle-btn {
+        bottom: 96px;
+        }
+
+        body[data-page^="/pos"] #chat-widget {
+        bottom: 166px;
+        }
+
+        @@media (max-width: 650px) {
+        body[data-page^="/pos"] #chat-toggle-btn {
+        right: 14px;
+        bottom: 88px;
+        }
+
+        body[data-page^="/pos"] #chat-widget {
+        right: 10px;
+        bottom: 154px;
+        width: calc(100vw - 20px);
+        }
         }
     </style>
 
