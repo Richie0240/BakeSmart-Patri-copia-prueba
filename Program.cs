@@ -33,12 +33,25 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-var dataProtectionPath = Path.Combine(builder.Environment.ContentRootPath, ".data-protection");
-Directory.CreateDirectory(dataProtectionPath);
-builder.Services
+var dataProtection = builder.Services
     .AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
     .SetApplicationName("BakeSmartPatri");
+
+var dataProtectionConnectionString = builder.Configuration.GetConnectionString("BakeSmartDb");
+if (builder.Configuration.GetValue<bool>("Features:UseSqlDatabase") &&
+    !string.IsNullOrWhiteSpace(dataProtectionConnectionString))
+{
+    dataProtection.AddKeyManagementOptions(options =>
+    {
+        options.XmlRepository = new SqlDataProtectionKeyRepository(dataProtectionConnectionString);
+    });
+}
+else
+{
+    var dataProtectionPath = Path.Combine(builder.Environment.ContentRootPath, ".data-protection");
+    Directory.CreateDirectory(dataProtectionPath);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
+}
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
