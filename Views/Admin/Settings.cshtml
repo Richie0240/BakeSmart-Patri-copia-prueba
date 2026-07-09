@@ -42,6 +42,16 @@
                     <input class="form-control" name="frequentCustomerDiscount" type="number" min="0" max="1" step="0.01" />
                     <small class="text-muted">Ej: 0.05 para 5%</small>
                 </div>
+                <div class="settings-toggle-card">
+                    <div>
+                        <label>Richie con catalogo en vivo</label>
+                        <small class="text-muted">Activa si el bot puede consultar Azure para responder productos, precios y stock.</small>
+                    </div>
+                    <label class="settings-switch">
+                        <input name="botUseDatabase" type="checkbox" value="true" />
+                        <span></span>
+                    </label>
+                </div>
             </div>
         </section>
 
@@ -295,6 +305,75 @@
         margin-bottom: 1rem;
     }
 
+    .settings-toggle-card {
+        min-height: 92px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+    }
+
+    .settings-toggle-card label {
+        display: block;
+        margin: 0 0 .25rem;
+        font-weight: 800;
+    }
+
+    .settings-toggle-card small {
+        display: block;
+        line-height: 1.35;
+    }
+
+    .settings-switch {
+        width: 58px;
+        height: 32px;
+        flex: 0 0 auto;
+        margin: 0;
+        position: relative;
+        cursor: pointer;
+    }
+
+    .settings-switch input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .settings-switch span {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-muted);
+        transition: background .18s ease, border-color .18s ease;
+    }
+
+    .settings-switch span::after {
+        content: "";
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        top: 3px;
+        left: 4px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: var(--shadow-sm);
+        transition: transform .18s ease;
+    }
+
+    .settings-switch input:checked + span {
+        border-color: var(--primary);
+        background: var(--primary);
+    }
+
+    .settings-switch input:checked + span::after {
+        transform: translateX(25px);
+    }
+
     .settings-hero-editor {
         display: grid;
         grid-template-columns: 360px minmax(0, 1fr);
@@ -444,7 +523,8 @@
             const fields = [
                 'iva','frequentCustomerDiscount','originName','originAddress','originLatitude','originLongitude',
                 'siteHeroEyebrow','siteHeroTitle','siteHeroDescription','siteHeroCode','siteHeroButtonText',
-                'siteHeroButtonUrl','siteHeroImageUrl','siteHeroAltText','sitePhone','siteEmail','siteAddress'
+                'siteHeroButtonUrl','siteHeroImageUrl','siteHeroAltText','sitePhone','siteEmail','siteAddress',
+                'botUseDatabase'
             ];
             const editors = {
                 home: { key: 'siteHomeBlocks', el: 'homeBlocksEditor', add: 'addHomeBlock', label: 'apartado' },
@@ -740,6 +820,10 @@
                 fields.forEach(key => {
                     const input = form.querySelector(`[name="${key}"]`);
                     const value = settings.find(s => s.key === key)?.value;
+                    if (input?.type === 'checkbox') {
+                        input.checked = value === undefined ? true : ['true', '1', 'si', 'yes', 'on'].includes(String(value).toLowerCase());
+                        return;
+                    }
                     if (input && value !== undefined) input.value = value;
                 });
 
@@ -787,6 +871,7 @@
                     if (key === 'originAddress') value = mapValues.address || value;
                     if (key === 'originLatitude') value = String(mapValues.lat ?? '');
                     if (key === 'originLongitude') value = String(mapValues.lng ?? '');
+                    if (key === 'botUseDatabase') value = form.querySelector('[name="botUseDatabase"]').checked ? 'true' : 'false';
                     if (value !== null) settings[key] = value;
                 });
 

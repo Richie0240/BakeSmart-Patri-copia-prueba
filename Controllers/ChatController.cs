@@ -75,10 +75,13 @@ public class ChatController : ControllerBase
 
     private async Task<string> BuildDatabaseContextAsync()
     {
-        var enabledText = _config["Bot:UseDatabase"] ?? _config["BOT_USE_DATABASE"];
-        var useDatabase = bool.TryParse(enabledText, out var enabled) && enabled;
+        var useDatabase = await ShouldUseDatabaseAsync();
         if (!useDatabase)
-            return "Contexto de base de datos desactivado por configuracion.";
+            return """
+                Contexto de base de datos desactivado desde la configuracion del sistema.
+                Puedes responder con informacion general de BakeSmart Patri, pero no inventes precios, stock ni disponibilidad.
+                Si preguntan por productos especificos, invita a revisar el catalogo en la web.
+                """;
 
         try
         {
@@ -106,5 +109,32 @@ public class ChatController : ControllerBase
         {
             return "No se pudo leer la base de datos para el contexto del bot en este momento.";
         }
+    }
+
+    private async Task<bool> ShouldUseDatabaseAsync()
+    {
+        try
+        {
+            var settings = await _sqlStore.SettingsDictionaryAsync();
+            if (settings.TryGetValue("botUseDatabase", out var configuredValue))
+                return IsEnabled(configuredValue);
+        }
+        catch
+        {
+            var fallbackValue = _config["Bot:UseDatabase"] ?? _config["BOT_USE_DATABASE"];
+            return IsEnabled(fallbackValue);
+        }
+
+        return true;
+    }
+
+    private static bool IsEnabled(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        return value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("si", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("on", StringComparison.OrdinalIgnoreCase);
     }
 }
