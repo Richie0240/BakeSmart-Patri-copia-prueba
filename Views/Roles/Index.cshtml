@@ -10,12 +10,18 @@
         </div>
         <a class="btn btn-outline" href="/Users"><i class="fas fa-arrow-left"></i> Volver a usuarios</a>
     </div>
-    <div id="rolesGrid" class="grid grid-3" style="gap:1rem;"></div>
-    <div class="card" style="margin-top:1rem;">
-        <h3 style="margin-top:0;">Matriz de funcionalidades</h3>
+    <div id="rolesGrid" class="roles-grid"></div>
+    <div class="card roles-matrix-card">
+        <div class="roles-matrix-head">
+            <div>
+                <span class="roles-eyebrow">Permisos</span>
+                <h3>Matriz de funcionalidades</h3>
+            </div>
+            <span class="badge badge-info" id="rolesFeatureCount">0 funcionalidades</span>
+        </div>
         <div class="table-container">
-            <table class="table">
-                <thead><tr><th>Funcionalidad</th><th>Admin</th><th>Staff</th><th>Cliente</th></tr></thead>
+            <table class="table roles-matrix-table">
+                <thead id="rolesMatrixHead"></thead>
                 <tbody id="rolesMatrix"></tbody>
             </table>
         </div>
@@ -24,28 +30,43 @@
 @section Scripts {
 <script>
 (() => {
+    const clean = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    })[char]);
+
     async function renderRoles() {
     await BakeSmartStore.refresh();
     const roles = BakeSmartStore.roles.list();
     const all = [...new Set(roles.flatMap(r => r.permissions))].sort();
     document.getElementById('rolesGrid').innerHTML = roles.map(r => `
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem;">
-                <h3 style="margin:0;">${r.name}</h3>
+        <div class="card role-card">
+            <div class="role-card-head">
+                <h3>${clean(r.name)}</h3>
                 <span class="badge badge-primary">${r.permissions.length} permisos</span>
             </div>
-            <p class="text-muted">${r.description}</p>
-            <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem;">
-                ${r.permissions.map(p => `<span class="badge ${r.name === 'Cliente' ? 'badge-info' : 'badge-success'}">${p}</span>`).join('')}
+            <p class="text-muted">${clean(r.description)}</p>
+            <div class="role-permissions">
+                ${r.permissions.map(p => `<span class="badge ${r.name === 'Cliente' ? 'badge-info' : 'badge-success'}">${clean(p)}</span>`).join('')}
             </div>
         </div>
     `).join('');
+    document.getElementById('rolesFeatureCount').textContent = `${all.length} funcionalidades`;
+    document.getElementById('rolesMatrixHead').innerHTML = `
+        <tr>
+            <th>Funcionalidad</th>
+            ${roles.map(r => `<th>${clean(r.name)}</th>`).join('')}
+        </tr>
+    `;
     document.getElementById('rolesMatrix').innerHTML = all.map(feature => `
         <tr>
-            <td>${feature}</td>
+            <td><strong>${clean(feature)}</strong></td>
             ${roles.map(r => `<td>${r.permissions.includes(feature) ? '<i class="fas fa-check" style="color:var(--success);"></i>' : '<i class="fas fa-xmark" style="color:var(--danger);"></i>'}</td>`).join('')}
         </tr>
-    `).join('') || `<tr><td colspan="4" class="text-center text-muted">Los permisos detallados se administran desde autenticacion y roles.</td></tr>`;
+    `).join('') || `<tr><td colspan="${roles.length + 1}" class="text-center text-muted">Los permisos detallados se administran desde autenticacion y roles.</td></tr>`;
     }
 
     renderRoles().catch(error => app.toast.error(error.message));

@@ -746,14 +746,54 @@ public sealed class SqlStore
             ORDER BY RoleName;
             """;
 
-        return await QueryAsync(sql, reader => new
+        return await QueryAsync(sql, reader =>
         {
-            id = reader.GetInt32("RoleId"),
-            name = reader.GetString("RoleName"),
-            description = reader.GetString("Description"),
-            system = reader.GetBoolean("IsSystemRole"),
-            permissions = Array.Empty<string>()
+            var roleName = reader.GetString("RoleName");
+            return new
+            {
+                id = reader.GetInt32("RoleId"),
+                name = roleName,
+                description = reader.GetString("Description"),
+                system = reader.GetBoolean("IsSystemRole"),
+                permissions = PermissionsForRole(roleName)
+            };
         });
+    }
+
+    private static string[] PermissionsForRole(string roleName)
+    {
+        return roleName switch
+        {
+            "Admin" => new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Reportes", "Bitacora", "Configuracion", "Usuarios", "Roles",
+                "Contabilidad", "Marketing", "Catalogo", "Perfil"
+            },
+            "Staff" => new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Bitacora", "Configuracion", "Catalogo", "Perfil"
+            },
+            "Supervisor" => new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Reportes", "Bitacora", "Contabilidad", "Marketing", "Perfil"
+            },
+            "Cajero" => new[]
+            {
+                "Dashboard", "Pedidos", "Punto de venta", "Catalogo", "Perfil"
+            },
+            "Repostero" => new[]
+            {
+                "Dashboard", "Produccion", "Inventario", "Pedidos", "Perfil"
+            },
+            "Cliente" => new[]
+            {
+                "Catalogo", "Pedido rapido", "Mis pedidos", "Seguimiento", "Perfil"
+            },
+            _ => new[] { "Perfil" }
+        };
     }
 
     public async Task<IReadOnlyList<object>> PaymentMethodsAsync()

@@ -9,12 +9,72 @@
     -webkit-overflow-scrolling: touch;
 }
 
-.roles-page .table {
-    min-width: 720px;
+.roles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 1rem;
+}
+
+.role-card {
+    min-height: 190px;
+}
+
+.role-card-head,
+.roles-matrix-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: .85rem;
+}
+
+.role-card-head h3,
+.roles-matrix-head h3 {
+    margin: 0;
+}
+
+.roles-eyebrow {
+    display: block;
+    margin-bottom: .2rem;
+    color: var(--primary);
+    font-size: .68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.role-permissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin-top: 1rem;
+}
+
+.roles-matrix-card {
+    margin-top: 1rem;
+}
+
+.roles-matrix-table {
+    min-width: 1120px;
+}
+
+.roles-matrix-table th,
+.roles-matrix-table td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.roles-matrix-table th:first-child,
+.roles-matrix-table td:first-child {
+    width: 220px;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg-card);
 }
 
 @media (max-width: 768px) {
-    .roles-page .grid {
+    .roles-grid {
         grid-template-columns: 1fr !important;
     }
 
