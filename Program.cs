@@ -44,7 +44,7 @@ var dataProtection = builder.Services
     .SetApplicationName("BakeSmartPatri");
 
 var dataProtectionConnectionString = builder.Configuration.GetConnectionString("BakeSmartDb");
-if (builder.Configuration.GetValue<bool>("Features:UseSqlDatabase") &&
+if (builder.Configuration.GetValue<bool>("Features:UseSqlDataProtection") &&
     !string.IsNullOrWhiteSpace(dataProtectionConnectionString))
 {
     dataProtection.AddKeyManagementOptions(options =>

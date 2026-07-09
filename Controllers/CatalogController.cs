@@ -7,10 +7,12 @@ namespace BakeSmartPatri.Controllers
     public class CatalogController : Controller
     {
         private readonly SqlStore _sqlStore;
+        private readonly ILogger<CatalogController> _logger;
 
-        public CatalogController(SqlStore sqlStore)
+        public CatalogController(SqlStore sqlStore, ILogger<CatalogController> logger)
         {
             _sqlStore = sqlStore;
+            _logger = logger;
         }
 
         public async Task<IActionResult> Index()
@@ -36,9 +38,17 @@ namespace BakeSmartPatri.Controllers
 
         private async Task<CatalogIndexViewModel> BuildIndexModelAsync()
         {
-            return new CatalogIndexViewModel(
-                await _sqlStore.CatalogCategoriesAsync(),
-                await _sqlStore.CatalogProductsAsync());
+            try
+            {
+                return new CatalogIndexViewModel(
+                    await _sqlStore.CatalogCategoriesAsync(),
+                    await _sqlStore.CatalogProductsAsync());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo cargar el catalogo publico.");
+                return new CatalogIndexViewModel([], []);
+            }
         }
     }
 }

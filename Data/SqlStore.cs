@@ -10,6 +10,9 @@ namespace BakeSmartPatri.Data;
 
 public sealed class SqlStore
 {
+    private const int ConnectTimeoutSeconds = 8;
+    private const int CommandTimeoutSeconds = 10;
+    private const int MaxTransientAttempts = 3;
     private readonly IConfiguration _configuration;
 
     public SqlStore(IConfiguration configuration)
@@ -26,6 +29,9 @@ public sealed class SqlStore
             throw new InvalidOperationException("ConnectionStrings:BakeSmartDb no esta configurado.");
 
         var settings = new SqlConnectionStringBuilder(connectionString);
+        settings.ConnectTimeout = Math.Min(
+            settings.ConnectTimeout > 0 ? settings.ConnectTimeout : ConnectTimeoutSeconds,
+            ConnectTimeoutSeconds);
         settings.ConnectRetryCount = Math.Max(3, settings.ConnectRetryCount);
         settings.ConnectRetryInterval = 2;
         return new SqlConnection(settings.ConnectionString);
@@ -1781,24 +1787,36 @@ public sealed class SqlStore
 
     private async Task ExecuteAsync(string sql, params SqlParameter[] parameters)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync();
+        await WithTransientRetryAsync(async () =>
+        {
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters);
-        await command.ExecuteNonQueryAsync();
+            await using var command = new SqlCommand(sql, connection)
+            {
+                CommandTimeout = CommandTimeoutSeconds
+            };
+            command.Parameters.AddRange(parameters);
+            await command.ExecuteNonQueryAsync();
+        });
     }
 
     private async Task<object?> ScalarAsync(string sql, params SqlParameter[] parameters)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync();
+        return await WithTransientRetryAsync<object?>(async () =>
+        {
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
 
-        await using var command = new SqlCommand(sql, connection);
-        if (parameters.Length > 0)
-            command.Parameters.AddRange(parameters);
+            await using var command = new SqlCommand(sql, connection)
+            {
+                CommandTimeout = CommandTimeoutSeconds
+            };
+            if (parameters.Length > 0)
+                command.Parameters.AddRange(parameters);
 
-        return await command.ExecuteScalarAsync();
+            return await command.ExecuteScalarAsync();
+        });
     }
 
     private static async Task ExecuteInTransactionAsync(SqlConnection connection, DbTransaction transaction, string sql, params SqlParameter[] parameters)
@@ -1827,22 +1845,64 @@ public sealed class SqlStore
 
     private async Task<IReadOnlyList<T>> QueryAsync<T>(string sql, Func<SqlDataReader, T> map, params SqlParameter[] parameters)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        if (parameters.Length > 0)
-            command.Parameters.AddRange(parameters);
-
-        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.CloseConnection);
-
-        var rows = new List<T>();
-        while (await reader.ReadAsync())
+        return await WithTransientRetryAsync<IReadOnlyList<T>>(async () =>
         {
-            rows.Add(map(reader));
-        }
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
 
-        return rows;
+            await using var command = new SqlCommand(sql, connection)
+            {
+                CommandTimeout = CommandTimeoutSeconds
+            };
+            if (parameters.Length > 0)
+                command.Parameters.AddRange(parameters);
+
+            await using var reader = await command.ExecuteReaderAsync(CommandBehavior.CloseConnection);
+
+            var rows = new List<T>();
+            while (await reader.ReadAsync())
+            {
+                rows.Add(map(reader));
+            }
+
+            return rows;
+        });
+    }
+
+    private static async Task WithTransientRetryAsync(Func<Task> operation)
+    {
+        await WithTransientRetryAsync(async () =>
+        {
+            await operation();
+            return true;
+        });
+    }
+
+    private static async Task<T> WithTransientRetryAsync<T>(Func<Task<T>> operation)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex) when (attempt < MaxTransientAttempts && IsTransientSqlFailure(ex))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt));
+            }
+        }
+    }
+
+    private static bool IsTransientSqlFailure(Exception ex)
+    {
+        if (ex is TimeoutException)
+            return true;
+
+        if (ex is not SqlException sqlException)
+            return false;
+
+        return sqlException.Errors.Cast<SqlError>().Any(error => error.Number is
+            -2 or 20 or 64 or 233 or 10053 or 10054 or 10060 or 10928 or 10929 or 40143 or 40197 or 40501 or 4060 or 40613 or 49918 or 49919 or 49920);
     }
 
     public async Task<ProfileData?> GetProfileAsync(string email)
