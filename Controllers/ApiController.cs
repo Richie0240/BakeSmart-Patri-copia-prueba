@@ -145,7 +145,7 @@ public class ApiController : Controller
     public async Task<IActionResult> Promotions() => Json(await _sqlStore.PromotionsAsync());
 
     [HttpGet("catalog/options")]
-    [Authorize(Policy = "StaffOrAdmin")]
+    [AllowAnonymous]
     public async Task<IActionResult> CatalogOptions()
     {
         var categoriesTask = _sqlStore.CatalogCategoriesAsync();

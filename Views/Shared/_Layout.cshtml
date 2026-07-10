@@ -492,6 +492,8 @@
                 try {
                     const response = await fetch('/api/catalog/options');
                     if (!response.ok) throw new Error('No se pudieron cargar las categorias.');
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!contentType.includes('application/json')) throw new Error('El catalogo devolvio una respuesta invalida.');
                     const data = await response.json();
                     const categories = data.categories || [];
                     const products = data.products || [];
