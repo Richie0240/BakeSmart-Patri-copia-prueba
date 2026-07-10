@@ -44,6 +44,20 @@
     min-width: 0;
 }
 
+.catalog-toolbar {
+    display: grid;
+    gap: .75rem;
+    width: min(780px, 100%);
+    margin: 0 auto 2rem;
+}
+
+.catalog-search-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 56px auto;
+    gap: .6rem !important;
+    align-items: stretch;
+}
+
 .catalog-search-field {
     width: 100%;
 }
@@ -51,6 +65,150 @@
 .catalog-search-button {
     flex: 0 0 auto;
     min-width: 56px;
+}
+
+.catalog-categories-trigger {
+    min-height: 48px;
+    white-space: nowrap;
+}
+
+.catalog-active-filter {
+    display: inline-flex;
+    align-items: center;
+    justify-self: center;
+    gap: .45rem;
+    min-height: 34px;
+    padding: .35rem .75rem;
+    color: var(--primary-dark);
+    border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-light) 36%, var(--bg-card));
+    font-size: .82rem;
+    font-weight: 850;
+}
+
+.catalog-categories-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    background: rgba(17, 24, 39, .42);
+    backdrop-filter: blur(4px);
+}
+
+.catalog-categories-backdrop[hidden] {
+    display: none;
+}
+
+.catalog-categories-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 9110;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(420px, 100vw);
+    height: 100dvh;
+    color: var(--text);
+    border-left: 1px solid var(--border);
+    background: var(--bg-card);
+    box-shadow: -22px 0 70px rgba(31, 20, 45, .22);
+    transform: translateX(105%);
+    transition: transform .22s ease;
+}
+
+.catalog-categories-sidebar.is-open {
+    transform: translateX(0);
+}
+
+.catalog-categories-sidebar__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.catalog-categories-sidebar__header span {
+    display: block;
+    color: var(--text-light);
+    font-size: .72rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.catalog-categories-sidebar__header h2 {
+    margin: .18rem 0 0;
+    color: var(--text);
+    font-size: 1.35rem;
+}
+
+.catalog-sidebar-close {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.catalog-categories-sidebar__body {
+    display: grid;
+    align-content: start;
+    gap: .65rem;
+    overflow: auto;
+    padding: 1rem;
+}
+
+.catalog-category-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .75rem;
+    align-items: center;
+    width: 100%;
+    min-height: 74px;
+    padding: .8rem;
+    text-align: left;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.catalog-category-option:hover,
+.catalog-category-option.active {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+    background: color-mix(in srgb, var(--primary-light) 32%, var(--bg));
+}
+
+.catalog-category-option span {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    color: var(--primary-dark);
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-light) 60%, var(--bg-card));
+}
+
+.catalog-category-option strong,
+.catalog-category-option small {
+    display: block;
+}
+
+.catalog-category-option small {
+    margin-top: .15rem;
+    color: var(--text-light);
+    font-size: .78rem;
+}
+
+body.catalog-sidebar-open {
+    overflow: hidden;
 }
 
 .catalog-product-grid {
@@ -87,6 +245,12 @@
         grid-template-columns: minmax(0, 1fr) 54px;
         gap: .75rem !important;
         align-items: stretch;
+    }
+
+    .catalog-categories-trigger {
+        grid-column: 1 / -1;
+        width: 100%;
+        justify-content: center;
     }
 
     .catalog-search-field {
@@ -142,6 +306,12 @@
 
     #searchProduct {
         width: 100%;
+    }
+}
+
+@media (max-width: 520px) {
+    .catalog-categories-sidebar {
+        width: 100vw;
     }
 }
 
