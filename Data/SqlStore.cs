@@ -1581,8 +1581,12 @@ public sealed class SqlStore
             SET XACT_ABORT ON;
             BEGIN TRAN;
 
-            IF NOT EXISTS (SELECT 1 FROM dbo.Ventas WHERE SaleId = @SaleId)
-                THROW 50150, 'La venta no existe.', 1;
+            DECLARE @ResolvedSaleId int = @SaleId;
+            IF NOT EXISTS (SELECT 1 FROM dbo.Ventas WHERE SaleId = @ResolvedSaleId)
+                SELECT @ResolvedSaleId = SaleId FROM dbo.Ventas WHERE OrderId = @SaleId;
+
+            IF @ResolvedSaleId IS NULL OR NOT EXISTS (SELECT 1 FROM dbo.Ventas WHERE SaleId = @ResolvedSaleId)
+                THROW 50150, 'La venta o pedido no existe.', 1;
 
             IF OBJECT_ID(N'dbo.NotasCreditoPOS', N'U') IS NULL
             BEGIN
@@ -1596,16 +1600,16 @@ public sealed class SqlStore
                 );
             END;
 
-            DECLARE @Amount decimal(18,2) = (SELECT Total FROM dbo.Ventas WHERE SaleId = @SaleId);
-            DECLARE @OrderId int = (SELECT OrderId FROM dbo.Ventas WHERE SaleId = @SaleId);
+            DECLARE @Amount decimal(18,2) = (SELECT Total FROM dbo.Ventas WHERE SaleId = @ResolvedSaleId);
+            DECLARE @OrderId int = (SELECT OrderId FROM dbo.Ventas WHERE SaleId = @ResolvedSaleId);
             DECLARE @CancelledStatusId int = (SELECT OrderStatusId FROM dbo.EstadosPedido WHERE Name = N'Cancelado');
 
             INSERT INTO dbo.NotasCreditoPOS (SaleId, Reason, Amount, CreatedAt)
-            VALUES (@SaleId, @Reason, @Amount, SYSUTCDATETIME());
+            VALUES (@ResolvedSaleId, @Reason, @Amount, SYSUTCDATETIME());
             DECLARE @CreditNoteId int = SCOPE_IDENTITY();
 
-            UPDATE dbo.PagosSesionCaja SET Amount = 0 WHERE SaleId = @SaleId;
-            UPDATE dbo.Ventas SET Subtotal = 0, Tax = 0, Total = 0 WHERE SaleId = @SaleId;
+            UPDATE dbo.PagosSesionCaja SET Amount = 0 WHERE SaleId = @ResolvedSaleId;
+            UPDATE dbo.Ventas SET Subtotal = 0, Tax = 0, Total = 0 WHERE SaleId = @ResolvedSaleId;
             IF @CancelledStatusId IS NOT NULL
             BEGIN
                 UPDATE dbo.Pedidos SET OrderStatusId = @CancelledStatusId WHERE OrderId = @OrderId;
@@ -1639,7 +1643,7 @@ public sealed class SqlStore
                 VALUES (source.ProductId, @InventoryLocationId, source.Quantity);
 
             INSERT INTO dbo.MovimientosInventario (ProductId, InventoryLocationId, MovementType, Quantity, Note, CreatedAt)
-            SELECT ProductId, @InventoryLocationId, N'ENTRADA', SUM(Quantity), CONCAT(N'Reversion nota credito venta #', @SaleId), SYSUTCDATETIME()
+            SELECT ProductId, @InventoryLocationId, N'ENTRADA', SUM(Quantity), CONCAT(N'Reversion nota credito venta #', @ResolvedSaleId), SYSUTCDATETIME()
             FROM dbo.DetallePedido
             WHERE OrderId = @OrderId
             GROUP BY ProductId;
@@ -1661,7 +1665,7 @@ public sealed class SqlStore
             new SqlParameter("@SaleId", input.SaleId),
             new SqlParameter("@Reason", input.Reason.Trim())));
 
-        await AddAuditLogAsync("NOTA_CREDITO_POS", $"Nota de credito #{id} registrada para venta #{input.SaleId}", userEmail);
+        await AddAuditLogAsync("NOTA_CREDITO_POS", $"Nota de credito #{id} registrada para venta o pedido #{input.SaleId}", userEmail);
         return id;
     }
 
@@ -2541,6 +2545,58 @@ public sealed class SqlStore
             totalSales = reader.GetDecimal("TotalSales"),
             userName = reader.GetString("UserName"),
             status = reader.GetString("Status")
+        });
+    }
+
+    public async Task<IReadOnlyList<object>> RecentPosSalesAsync()
+    {
+        const string sql = """
+            IF OBJECT_ID(N'dbo.NotasCreditoPOS', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.NotasCreditoPOS
+                (
+                    CreditNoteId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    SaleId int NOT NULL,
+                    Reason nvarchar(300) NOT NULL,
+                    Amount decimal(18,2) NOT NULL,
+                    CreatedAt datetime2 NOT NULL
+                );
+            END;
+
+            SELECT TOP 25
+                v.SaleId,
+                v.OrderId,
+                v.CreatedAt,
+                v.Total,
+                pm.Name AS PaymentMethod,
+                c.FullName AS CustomerName,
+                COALESCE(cs.CashSessionId, 0) AS CashSessionId,
+                CASE WHEN cn.CreditNoteId IS NULL THEN CAST(0 AS bit) ELSE CAST(1 AS bit) END AS HasCreditNote
+            FROM dbo.Ventas v
+            INNER JOIN dbo.Pedidos o ON o.OrderId = v.OrderId
+            INNER JOIN dbo.Clientes c ON c.CustomerId = o.CustomerId
+            INNER JOIN dbo.MetodosPago pm ON pm.PaymentMethodId = v.PaymentMethodId
+            LEFT JOIN dbo.PagosSesionCaja csp ON csp.SaleId = v.SaleId
+            LEFT JOIN dbo.SesionesCaja cs ON cs.CashSessionId = csp.CashSessionId
+            OUTER APPLY (
+                SELECT TOP 1 CreditNoteId
+                FROM dbo.NotasCreditoPOS n
+                WHERE n.SaleId = v.SaleId
+                ORDER BY n.CreditNoteId DESC
+            ) cn
+            ORDER BY v.CreatedAt DESC, v.SaleId DESC;
+            """;
+
+        return await QueryAsync(sql, reader => new
+        {
+            saleId = reader.GetInt32("SaleId"),
+            orderId = reader.GetInt32("OrderId"),
+            cashSessionId = reader.GetInt32("CashSessionId"),
+            createdAt = reader.GetDateTime("CreatedAt").ToString("o"),
+            customerName = reader.GetString("CustomerName"),
+            paymentMethod = reader.GetString("PaymentMethod"),
+            total = reader.GetDecimal("Total"),
+            hasCreditNote = reader.GetBoolean("HasCreditNote")
         });
     }
 

@@ -307,9 +307,13 @@
     pos: {
       config() { return cached("posConfig", { iva: 0, frequentCustomerDiscount: 0, paymentMethods: [] }); },
       activeSession() { return activePosSession(); },
+      cachedSessions() { return posSessionsCache; },
       async sessions() {
         await loadPosSessions();
         return posSessionsCache;
+      },
+      recentSales() {
+        return request("/api/pos/sales");
       },
       searchProducts(query) {
         const q = String(query || "").toLowerCase();

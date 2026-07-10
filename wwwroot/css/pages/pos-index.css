@@ -33,6 +33,15 @@
 .session-status-value { margin-top:.3rem; color:#25293b; font-size:.88rem; font-weight:850; }
 .session-inline-actions { display:grid; gap:.6rem; margin-top:.7rem; }
 .session-inline-actions .form-control { width:100%; }
+.pos-sessions-board { margin-top:.85rem; }
+.pos-sessions-list,.pos-sales-list { display:grid; gap:.5rem; }
+.pos-session-row,.pos-sale-row { display:flex; align-items:center; justify-content:space-between; gap:.55rem; padding:.65rem; border:1px solid #e9e2ee; border-radius:8px; background:#fff; }
+.pos-session-row strong,.pos-sale-row strong { display:block; color:#25293b; font-size:.75rem; }
+.pos-session-row span,.pos-sale-row small { display:block; color:#7e8491; font-size:.66rem; }
+.pos-session-row b,.pos-sale-row b { color:#17375d; font-size:.74rem; white-space:nowrap; }
+.pos-sale-row { width:100%; text-align:left; cursor:pointer; }
+.pos-sale-row:disabled { opacity:.55; cursor:not-allowed; }
+.pos-small-empty { padding:.75rem; border:1px dashed #dacfe5; border-radius:8px; font-size:.75rem; text-align:center; }
 
 .pos-main-card { min-width:0; }
 .pos-main-grid { display:block !important; width:100% !important; min-width:0 !important; }
@@ -80,8 +89,8 @@ body.pos-cart-is-open .pos-cart-fab { opacity:0; pointer-events:none; }
 .pos-cart-totals { display:grid; gap:.45rem; padding:.9rem; border:1px solid #eadff0; border-radius:10px; background:linear-gradient(120deg,#f8f2ff,#fff7fb); }
 .pos-cart-totals .total-final strong { color:#6f3ddd; font-size:1.25rem; }
 
-body.dark .pos-summary-card,body.dark .pos-side-card,body.dark .pos-main-card,body.dark .pos-history-card,body.dark .payment-method-card,body.dark .session-status-card,body.dark .pos-product-card,body.dark .pos-cart-summary-panel,body.dark .pos-cart-item { background:#211e2b !important; border-color:#3b3547 !important; }
-body.dark .pos-title,body.dark .pos-panel-title,body.dark .pos-panel-title-sm,body.dark .pos-product-card h4,body.dark .pos-summary-card h2,body.dark .payment-method-name,body.dark .session-status-value { color:#fff; }
+body.dark .pos-summary-card,body.dark .pos-side-card,body.dark .pos-main-card,body.dark .pos-history-card,body.dark .payment-method-card,body.dark .session-status-card,body.dark .pos-product-card,body.dark .pos-cart-summary-panel,body.dark .pos-cart-item,body.dark .pos-session-row,body.dark .pos-sale-row { background:#211e2b !important; border-color:#3b3547 !important; }
+body.dark .pos-title,body.dark .pos-panel-title,body.dark .pos-panel-title-sm,body.dark .pos-product-card h4,body.dark .pos-summary-card h2,body.dark .payment-method-name,body.dark .session-status-value,body.dark .pos-session-row strong,body.dark .pos-sale-row strong { color:#fff; }
 
 @media(max-width:1050px){.pos-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pos-layout{grid-template-columns:1fr!important}.pos-side-card{position:static}.payment-methods-panel{grid-template-columns:repeat(2,minmax(0,1fr))}.pos-products-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @media(max-width:1050px){.pos-cart-checkout-layout{grid-template-columns:1fr}.pos-cart-checkout-card .pos-checkout-form{grid-template-columns:repeat(2,minmax(0,1fr));}}

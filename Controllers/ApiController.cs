@@ -491,6 +491,10 @@ public class ApiController : Controller
     [Authorize(Policy = "StaffOrAdmin")]
     public async Task<IActionResult> CashSessions() => Json(await _sqlStore.CashSessionsAsync());
 
+    [HttpGet("pos/sales")]
+    [Authorize(Policy = "StaffOrAdmin")]
+    public async Task<IActionResult> RecentPosSales() => Json(await _sqlStore.RecentPosSalesAsync());
+
     [AllowAnonymous]
     [HttpPost("auth/forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)

@@ -76,6 +76,16 @@
 
             <div id="posSessionPanel"></div>
 
+            <div class="pos-sessions-board">
+                <div class="pos-panel-header pos-panel-header--compact">
+                    <div>
+                        <div class="pos-panel-eyebrow">Supervision</div>
+                        <h4 class="pos-panel-title-sm">Estado de cajas</h4>
+                    </div>
+                </div>
+                <div id="posSessionsList" class="pos-sessions-list"></div>
+            </div>
+
             <div class="hr"></div>
 
             <div class="pos-panel-header pos-panel-header--compact">
@@ -97,10 +107,11 @@
             <div class="hr"></div>
 
             <form id="creditNoteForm" class="pos-payment-config-form">
-                <input class="form-control" name="saleId" type="number" min="1" placeholder="ID de venta" required />
+                <input class="form-control" name="saleId" type="number" min="1" placeholder="ID de venta o pedido" required />
                 <input class="form-control" name="reason" placeholder="Motivo de nota de crédito" required />
                 <button class="btn btn-ghost btn-sm" type="submit">Registrar nota</button>
             </form>
+            <div class="pos-recent-sales" id="posRecentSales"></div>
         </aside>
 
         <section class="card pos-main-card">
@@ -264,10 +275,12 @@
             const checkoutForm = document.getElementById('posCheckoutForm');
             const cart = [];
             const fmt = app.utils.formatCurrency;
+            let recentSales = [];
 
             const getConfig = () => store.pos.config();
             const getActiveSession = () => store.pos.activeSession();
             const getProducts = () => store.pos.searchProducts(searchInput.value);
+            const money = value => app.utils.formatCurrency(Number(value || 0));
 
             ['posCartToggle', 'posCartBackdrop', 'posCartSheet', 'posCartPanel'].forEach(id => {
                 const element = document.getElementById(id);
@@ -323,6 +336,48 @@
                 }
 
                 renderPaymentMethods();
+                renderSessionsList();
+                renderRecentSales();
+            }
+
+            function renderSessionsList() {
+                const container = document.getElementById('posSessionsList');
+                const sessions = store.pos.cachedSessions ? store.pos.cachedSessions() : [];
+                container.innerHTML = sessions.slice(0, 5).map(session => `
+                    <article class="pos-session-row">
+                        <div>
+                            <strong>Caja #${session.id}</strong>
+                            <span>${session.userName || 'Sistema'} · ${new Date(session.openedAt).toLocaleString('es-CR')}</span>
+                        </div>
+                        <div>
+                            <span class="badge ${String(session.status || '').toLowerCase().startsWith('abiert') ? 'badge-success' : 'badge-warning'}">${session.status}</span>
+                            <b>${money(session.totalSales)}</b>
+                        </div>
+                    </article>
+                `).join('') || '<div class="text-muted pos-small-empty">No hay cajas registradas.</div>';
+            }
+
+            function renderRecentSales() {
+                const container = document.getElementById('posRecentSales');
+                container.innerHTML = `
+                    <div class="pos-panel-header pos-panel-header--compact">
+                        <div>
+                            <div class="pos-panel-eyebrow">Notas de credito</div>
+                            <h4 class="pos-panel-title-sm">Ventas recientes</h4>
+                        </div>
+                    </div>
+                    <div class="pos-sales-list">
+                        ${recentSales.slice(0, 6).map(sale => `
+                            <button class="pos-sale-row" type="button" onclick="selectCreditNoteSale(${sale.saleId})" ${sale.hasCreditNote ? 'disabled' : ''}>
+                                <span>
+                                    <strong>Venta #${sale.saleId}</strong>
+                                    <small>Pedido #${sale.orderId} · ${sale.customerName}</small>
+                                </span>
+                                <b>${money(sale.total)}</b>
+                            </button>
+                        `).join('') || '<div class="text-muted pos-small-empty">Aun no hay ventas POS.</div>'}
+                    </div>
+                `;
             }
 
             function renderPaymentMethods() {
@@ -681,6 +736,7 @@
 
                 try {
                     await store.pos.creditNote(Object.fromEntries(new FormData(event.target).entries()));
+                    recentSales = await store.pos.recentSales();
                     event.target.reset();
                     app.toast.success('Nota de credito registrada.');
                     await renderAll();
@@ -708,6 +764,7 @@
                             }))
                         });
 
+                        recentSales = await store.pos.recentSales();
                         cart.splice(0, cart.length);
                         formEl.reset();
 
@@ -792,8 +849,19 @@
                 renderCart();
             }
 
+            window.selectCreditNoteSale = (saleId) => {
+                const input = document.querySelector('#creditNoteForm [name="saleId"]');
+                if (input) {
+                    input.value = saleId;
+                    input.focus();
+                }
+            };
+
             // Cargar sesiones de caja primero, luego refresh general
-            store.refreshPos().then(() => store.refresh().then(renderAll).catch(error => app.toast.error(error.message)));
+            store.refreshPos().then(() => store.refresh().then(async () => {
+                try { recentSales = await store.pos.recentSales(); } catch { recentSales = []; }
+                renderAll();
+            }).catch(error => app.toast.error(error.message)));
         })();
     </script>
 }

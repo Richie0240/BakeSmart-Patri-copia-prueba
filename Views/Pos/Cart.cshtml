@@ -108,7 +108,8 @@
                     (form.customerName.value && String(row.fullName || '').toLowerCase() === String(form.customerName.value).toLowerCase())
                 );
                 const frequent = customer?.frequent ? Number(store.pos.config().frequentCustomerDiscount || 0) : 0;
-                return Math.max(manual, frequent);
+                const promotion = Number(store.pos.config().activePromotionDiscount || 0);
+                return Math.max(manual, frequent, promotion);
             }
 
             function remainingStock(productId) {
