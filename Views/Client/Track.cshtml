@@ -1,4 +1,4 @@
-
+﻿
 @section Styles {
     <link rel="stylesheet" href="~/css/pages/client-track.css" asp-append-version="true" />
 }
@@ -68,16 +68,13 @@
             <div class="card">
                 <div class="track-side-header">
                     <h3 class="track-section-title">Progreso del pedido</h3>
-                    <button class="btn btn-primary btn-sm" id="simulateRoute" type="button">
-                        <i class="fas fa-truck-fast"></i>
-                        Simular avance
-                    </button>
+                    <span class="badge badge-info"><i class="fas fa-eye"></i> Solo lectura</span>
                 </div>
                 <div id="trackingTimeline" class="tracking-timeline"></div>
             </div>
 
             <div class="card">
-                <h3 class="track-section-title track-summary-title">Resumen logístico</h3>
+                <h3 class="track-section-title track-summary-title">Resumen logÃ­stico</h3>
                 <div id="trackingSummary" class="tracking-summary text-muted"></div>
             </div>
         </div>
@@ -94,7 +91,6 @@
     const origin = BakeSmartStore.geo.origin();
     const presetSelect = document.getElementById('trackPresetSelect');
     const orderSelect = document.getElementById('trackOrderSelect');
-    const simulateButton = document.getElementById('simulateRoute');
     const userEmail = document.body.dataset.userEmail || '';
 
     const presetOptions = [
@@ -277,7 +273,7 @@
     function renderTimeline(order, destination) {
         const currentStep = order.tracking.currentStep || 0;
         const isInternational = destination.country !== 'Costa Rica';
-        const extraLabel = isInternational ? 'Salida aérea internacional' : 'Ruta terrestre metropolitana';
+        const extraLabel = isInternational ? 'Salida aÃ©rea internacional' : 'Ruta terrestre metropolitana';
         const steps = [...order.tracking.steps];
 
         if (!steps.includes(extraLabel)) {
@@ -345,7 +341,7 @@
 
         const destination = activePreset(order);
         const isInternational = destination.country !== 'Costa Rica';
-        const routeType = isInternational ? 'Trayectoria aérea' : 'Trayecto local';
+        const routeType = isInternational ? 'Trayectoria aÃ©rea' : 'Trayecto local';
         document.getElementById('trackOrderId').textContent = `#${order.id}`;
         document.getElementById('trackStatus').textContent = order.status;
         document.getElementById('trackRouteType').textContent = routeType;
@@ -395,7 +391,7 @@
         } else {
             const operationMarker = L.marker(localRoute.operationPoint, {
                 icon: icons.courier
-            }).addTo(mapInstance).bindPopup('Operación local');
+            }).addTo(mapInstance).bindPopup('OperaciÃ³n local');
 
             const firstLeg = L.polyline(localRoute.firstLeg, {
                 color: '#f59e0b',
@@ -432,7 +428,7 @@
         document.getElementById('trackingSummary').innerHTML = `
             <div class="summary-row"><span>Origen</span><strong>${origin.name}</strong></div>
             <div class="summary-row"><span>Cliente</span><strong>${order.customerName}</strong></div>
-            <div class="summary-row"><span>Dirección</span><strong>${order.address}</strong></div>
+            <div class="summary-row"><span>DirecciÃ³n</span><strong>${order.address}</strong></div>
             <div class="summary-row"><span>Destino visual</span><strong>${destination.name}</strong></div>
             <div class="summary-row"><span>Latitud / longitud</span><strong>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}</strong></div>
             <div class="summary-row"><span>Modalidad</span><strong>${routeType}</strong></div>
@@ -446,11 +442,11 @@
         const orders = getOrders();
 
         orderSelect.innerHTML = orders.map(o =>
-            `<option value="${o.id}">#${o.id} · ${o.customerName} · ${o.status}</option>`
+            `<option value="${o.id}">#${o.id} Â· ${o.customerName} Â· ${o.status}</option>`
         ).join('');
 
         presetSelect.innerHTML = presetOptions.map(p =>
-            `<option value="${p.id}">${p.name}${p.country && p.country !== '-' ? ` · ${p.country}` : ''}</option>`
+            `<option value="${p.id}">${p.name}${p.country && p.country !== '-' ? ` Â· ${p.country}` : ''}</option>`
         ).join('');
 
         renderOrder(orders[0]?.id);
@@ -458,23 +454,6 @@
 
     orderSelect.addEventListener('change', () => renderOrder(orderSelect.value));
     presetSelect.addEventListener('change', () => renderOrder(orderSelect.value));
-
-    simulateButton.addEventListener('click', () => {
-        try {
-            const current = BakeSmartStore.orders.list().find(x => x.id === Number(activeOrderId));
-            if (!current) return;
-
-            if (current.status === 'Listo') {
-                BakeSmartStore.orders.updateStatus(current.id, 'En camino');
-            }
-
-            BakeSmartStore.orders.simulateTracking(current.id);
-            app.toast.info('Ubicación del pedido actualizada.');
-            renderOrder(current.id);
-        } catch (error) {
-            app.toast.error(error.message);
-        }
-    });
 
     async function initializePage() {
         if (pageInitialized) return;
@@ -497,3 +476,4 @@
 })();
 </script>
 }
+

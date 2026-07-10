@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -83,6 +84,9 @@ public sealed class SqlStore
                 o.CurrentLatitude,
                 o.CurrentLongitude,
                 o.TrackingStep,
+                MIN(oi.ProductId) AS FirstProductId,
+                MIN(oi.Quantity) AS FirstQuantity,
+                MIN(oi.UnitPrice) AS FirstUnitPrice,
                 STRING_AGG(CONCAT(oi.Quantity, ' x ', p.Name), ', ') AS Products
             FROM dbo.Pedidos o
             INNER JOIN dbo.Clientes c ON c.CustomerId = o.CustomerId
@@ -106,6 +110,9 @@ public sealed class SqlStore
             cliente = reader.GetString("CustomerName"),
             customerEmail = reader.GetString("CustomerEmail"),
             producto = reader.GetString("Products"),
+            productId = reader.GetInt32("FirstProductId"),
+            quantity = reader.GetDecimal("FirstQuantity"),
+            unitPrice = reader.GetDecimal("FirstUnitPrice"),
             estado = reader.GetString("OrderStatus"),
             entrega = reader.GetDateTime("DeliveryDate").ToString("yyyy-MM-dd"),
             total = reader.GetDecimal("Total"),
@@ -781,6 +788,43 @@ public sealed class SqlStore
 
     private static string[] PermissionsForRole(string roleName)
     {
+        var normalized = (roleName ?? "")
+            .Normalize(NormalizationForm.FormD)
+            .Where(ch => CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+            .Aggregate(new StringBuilder(), (builder, ch) => builder.Append(char.ToLowerInvariant(ch)))
+            .ToString();
+
+        if (normalized.Contains("admin"))
+            return new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Reportes", "Bitacora", "Configuracion", "Usuarios", "Roles",
+                "Contabilidad", "Marketing", "Catalogo", "Perfil"
+            };
+
+        if (normalized.Contains("staff"))
+            return new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Bitacora", "Configuracion", "Catalogo", "Perfil"
+            };
+
+        if (normalized.Contains("super"))
+            return new[]
+            {
+                "Dashboard", "Pedidos", "Produccion", "Inventario", "Punto de venta",
+                "Reportes", "Bitacora", "Contabilidad", "Marketing", "Perfil"
+            };
+
+        if (normalized.Contains("caj"))
+            return new[] { "Dashboard", "Pedidos", "Punto de venta", "Catalogo", "Perfil" };
+
+        if (normalized.Contains("repost"))
+            return new[] { "Dashboard", "Produccion", "Inventario", "Pedidos", "Perfil" };
+
+        if (normalized.Contains("cliente"))
+            return new[] { "Catalogo", "Pedido rapido", "Mis pedidos", "Seguimiento", "Perfil" };
+
         return roleName switch
         {
             "Admin" => new[]

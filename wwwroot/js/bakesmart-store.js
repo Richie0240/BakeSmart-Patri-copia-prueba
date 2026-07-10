@@ -175,7 +175,15 @@
           deliveryDate: order.deliveryDate || order.entrega,
           createdAt: order.createdAt || order.entrega || new Date().toISOString(),
           address: order.address || "",
-          items: order.items || [{ name: order.producto || "Pedido", quantity: 1 }],
+          productId: Number(order.productId || 0),
+          quantity: Number(order.quantity || 1),
+          unitPrice: Number(order.unitPrice || 0),
+          items: order.items || [{
+            productId: Number(order.productId || 0),
+            name: order.producto || "Pedido",
+            quantity: Number(order.quantity || 1),
+            unitPrice: Number(order.unitPrice || 0)
+          }],
           tracking: order.tracking || {
             destinationLat: Number(order.destinationLat || order.destinationLatitude || 0),
             destinationLng: Number(order.destinationLng || order.destinationLongitude || 0),

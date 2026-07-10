@@ -124,6 +124,10 @@
                     paymentStatus: o.paymentStatus || '-',
                     paymentMethod: o.paymentMethod || '',
                     total: Number(o.total || 0),
+                    productId: Number(o.productId || 0),
+                    quantity: Number(o.quantity || 1),
+                    unitPrice: Number(o.unitPrice || 0),
+                    producto: o.producto || '',
                     createdAt: o.createdAt || o.entrega || new Date().toISOString()
                 };
             }
@@ -184,7 +188,7 @@
                                         .join('')}
                                 </select>
                                 ${o.paymentStatus !== 'Pagado'
-                                    ? `<button class="btn btn-outline btn-sm" onclick="payOrder(${o.id})">Marcar pagado</button>`
+                                    ? `<button class="btn btn-outline btn-sm" onclick="chargeOrder(${o.id})"><i class="fas fa-credit-card"></i> Cobrar</button>`
                                     : ''}
                                 <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteOrder(${o.id})">
                                     <i class="fas fa-trash-can"></i>
@@ -218,17 +222,28 @@
                 }
             };
 
-            window.payOrder = (id) => {
-                fetch(`/api/orders/${id}/pay`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ method: 'Efectivo' })
-                }).then(async response => {
-                    if (!response.ok) throw new Error(await response.text());
-                    await loadOrders();
-                    app.toast.success('Pedido marcado como pagado.');
-                    render();
-                }).catch(error => app.toast.error(error.message));
+            window.chargeOrder = (id) => {
+                const order = orders.find(item => Number(item.id) === Number(id));
+                if (!order) return;
+
+                const cartItem = {
+                    productId: Number(order.productId),
+                    name: order.producto || 'Pedido',
+                    code: `PED-${order.id}`,
+                    unitPrice: Number(order.unitPrice || order.total || 0),
+                    quantity: Number(order.quantity || 1)
+                };
+
+                sessionStorage.setItem('bakesmart.pos.pendingOrder', JSON.stringify({
+                    id: order.id,
+                    customerName: order.customerName || '',
+                    customerEmail: order.customerEmail || '',
+                    paymentMethod: order.paymentMethod || 'Tarjeta',
+                    total: Number(order.total || 0),
+                    item: cartItem
+                }));
+                sessionStorage.setItem('bakesmart.pos.cart', JSON.stringify([cartItem]));
+                window.location.assign('/Pos/Cart?orderId=' + encodeURIComponent(order.id));
             };
 
             window.deleteOrder = (id) => {
