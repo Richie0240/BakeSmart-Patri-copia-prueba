@@ -44,10 +44,12 @@ var dataProtection = builder.Services
     .SetApplicationName("BakeSmartPatri");
 
 var dataProtectionConnectionString = builder.Configuration.GetConnectionString("BakeSmartDb");
-var sqlDataProtectionSetting = builder.Configuration["Features:UseSqlDataProtection"];
-var useSqlDataProtection = bool.TryParse(sqlDataProtectionSetting, out var configuredSqlDataProtection)
-    ? configuredSqlDataProtection
-    : !builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Features:UseSqlDatabase");
+var disableSqlDataProtection = builder.Configuration.GetValue<bool>("Features:DisableSqlDataProtection");
+var useSqlDataProtection =
+    builder.Configuration.GetValue<bool>("Features:UseSqlDataProtection") ||
+    (!disableSqlDataProtection &&
+     !builder.Environment.IsDevelopment() &&
+     builder.Configuration.GetValue<bool>("Features:UseSqlDatabase"));
 
 if (useSqlDataProtection &&
     !string.IsNullOrWhiteSpace(dataProtectionConnectionString))
