@@ -352,11 +352,254 @@ body[data-page^="/marketing"] .table-container {
     overflow-x: auto !important;
 }
 
+body[data-page="/inventory/products"] .products-page {
+    display: grid !important;
+    gap: 1rem !important;
+    width: min(1400px, calc(100% - 2rem)) !important;
+    margin: 0 auto !important;
+    padding: 1.25rem 0 2.5rem !important;
+}
+
+body[data-page="/inventory/products"] .products-board {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+    gap: 1rem !important;
+    align-items: stretch !important;
+}
+
+body[data-page="/inventory/products"] .product-tile {
+    display: grid !important;
+    grid-template-columns: 48px minmax(0, 1fr) auto !important;
+    grid-template-areas:
+        "icon body meta"
+        "actions actions actions" !important;
+    gap: .85rem !important;
+    align-items: start !important;
+    min-height: 178px !important;
+    padding: 1rem !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background: var(--bg-card) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+body[data-page="/inventory/products"] .product-tile--inactive {
+    opacity: .62 !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__icon {
+    grid-area: icon !important;
+    display: grid !important;
+    place-items: center !important;
+    width: 48px !important;
+    height: 48px !important;
+    color: var(--primary-dark) !important;
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border)) !important;
+    border-radius: 8px !important;
+    background: color-mix(in srgb, var(--primary-light) 60%, var(--bg-card)) !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__body {
+    grid-area: body !important;
+    min-width: 0 !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__body span,
+body[data-page="/inventory/products"] .product-tile__body p {
+    display: block !important;
+    color: var(--text-light) !important;
+    font-size: .78rem !important;
+    font-weight: 800 !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__body h3 {
+    margin: .2rem 0 .35rem !important;
+    color: var(--text) !important;
+    font-size: 1.05rem !important;
+    line-height: 1.25 !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__body p {
+    margin: 0 !important;
+    font-weight: 700 !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__meta {
+    grid-area: meta !important;
+    display: grid !important;
+    justify-items: end !important;
+    gap: .35rem !important;
+    white-space: nowrap !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__meta strong {
+    color: var(--primary-dark) !important;
+    font-size: 1.02rem !important;
+}
+
+body[data-page="/inventory/products"] .product-tile__actions {
+    grid-area: actions !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: .55rem !important;
+    padding-top: .75rem !important;
+    border-top: 1px solid var(--border) !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal[hidden] {
+    display: none !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9200 !important;
+    display: grid !important;
+    place-items: center !important;
+    padding: 1rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__backdrop {
+    position: absolute !important;
+    inset: 0 !important;
+    background: rgba(17, 24, 39, .48) !important;
+    backdrop-filter: blur(6px) !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__dialog {
+    position: relative !important;
+    z-index: 1 !important;
+    display: grid !important;
+    gap: 1rem !important;
+    width: min(460px, 100%) !important;
+    max-height: min(86vh, 720px) !important;
+    overflow: auto !important;
+    padding: 1rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    background: var(--bg-card) !important;
+    box-shadow: 0 24px 70px rgba(39, 23, 51, .25) !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__close {
+    position: absolute !important;
+    top: .75rem !important;
+    right: .75rem !important;
+    display: grid !important;
+    place-items: center !important;
+    width: 36px !important;
+    height: 36px !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background: var(--bg-card) !important;
+    cursor: pointer !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__header {
+    display: flex !important;
+    gap: .8rem !important;
+    align-items: center !important;
+    padding-right: 2.5rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__header > span {
+    display: grid !important;
+    place-items: center !important;
+    width: 42px !important;
+    height: 42px !important;
+    color: var(--primary-dark) !important;
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border)) !important;
+    border-radius: 8px !important;
+    background: color-mix(in srgb, var(--primary-light) 60%, var(--bg-card)) !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__header h2 {
+    margin: .1rem 0 0 !important;
+    color: var(--secondary) !important;
+    font-size: 1.25rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__amount {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 1rem !important;
+    padding: .85rem !important;
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)) !important;
+    border-radius: 8px !important;
+    background: color-mix(in srgb, var(--primary-light) 34%, var(--bg-card)) !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__amount span,
+body[data-page="/pos/cart"] .pos-payment-modal__note,
+body[data-page="/pos/cart"] .pos-payment-form label span {
+    color: var(--text-light) !important;
+    font-size: .78rem !important;
+    font-weight: 850 !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__amount strong {
+    color: var(--secondary) !important;
+    font-size: 1.45rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-form {
+    display: grid !important;
+    gap: .75rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-form label {
+    display: grid !important;
+    gap: .28rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-form__grid {
+    display: grid !important;
+    grid-template-columns: 1fr 120px !important;
+    gap: .7rem !important;
+}
+
+body[data-page="/pos/cart"] .pos-payment-modal__note {
+    margin: 0 !important;
+    line-height: 1.45 !important;
+}
+
 @media (max-width: 1080px) {
     body[data-page="/users"] .users-hero,
     body[data-page="/users"] .users-layout,
     body[data-page="/roles"] .roles-layout,
     body[data-page^="/pos"] .pos-layout {
         grid-template-columns: 1fr !important;
+    }
+}
+
+@media (max-width: 720px) {
+    body[data-page="/inventory/products"] .products-board,
+    body[data-page="/inventory/products"] .product-tile {
+        grid-template-columns: 1fr !important;
+    }
+
+    body[data-page="/inventory/products"] .product-tile {
+        grid-template-areas:
+            "icon"
+            "body"
+            "meta"
+            "actions" !important;
+    }
+
+    body[data-page="/inventory/products"] .product-tile__meta {
+        justify-items: start !important;
+    }
+
+    body[data-page="/inventory/products"] .product-tile__actions,
+    body[data-page="/pos/cart"] .pos-payment-form__grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    body[data-page="/inventory/products"] .product-tile__actions {
+        display: grid !important;
+        justify-content: stretch !important;
     }
 }
