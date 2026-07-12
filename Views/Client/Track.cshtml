@@ -136,6 +136,10 @@
         return status.includes('camino') || status.includes('entregado');
     }
 
+    function isDelivered(order) {
+        return normalizeStatus(order.status).includes('entregado');
+    }
+
     function routeWaitingMessage(order) {
         const status = normalizeStatus(order.status);
         if (status.includes('produccion')) {
@@ -325,6 +329,16 @@
         };
     }
 
+    function currentPointForOrder(order, fallbackPoint) {
+        const tracking = order.tracking || {};
+        const currentLat = Number(tracking.currentLat);
+        const currentLng = Number(tracking.currentLng);
+        if (isValidCoordinate(currentLat, currentLng) && !(currentLat === 0 && currentLng === 0)) {
+            return [currentLat, currentLng];
+        }
+        return fallbackPoint;
+    }
+
     function animateMarker(points, icon) {
         if (!points.length) return;
 
@@ -358,27 +372,32 @@
         return sanitizeLocation(BakeSmartStore.geo.resolveDestination(preset?.name || order.address, preset || {}), destinationFallback);
     }
 
-    function renderTimeline(order, destination) {
+    function renderTimeline(order, destination, hasLiveRoute) {
         const currentStep = order.tracking?.currentStep || 0;
         const isInternational = destination.country !== 'Costa Rica';
         const extraLabel = isInternational ? 'Salida aerea internacional' : 'Ruta terrestre metropolitana';
         const steps = [...(order.tracking?.steps || ['Pedido recibido', 'Confirmado', 'En produccion', 'Listo', 'Entregado'])];
 
-        if (!steps.includes(extraLabel)) {
+        if (hasLiveRoute && !steps.includes(extraLabel)) {
             steps.splice(4, 0, extraLabel);
         }
 
         document.getElementById('trackingTimeline').innerHTML = steps.map((step, index) => {
-            const normalizedCurrent = isInternational && currentStep >= 3 ? currentStep + 1 : currentStep;
+            const normalizedCurrent = hasLiveRoute && isInternational && currentStep >= 3 ? currentStep + 1 : currentStep;
             const state = index < normalizedCurrent ? 'done' : index === normalizedCurrent ? 'current' : 'pending';
             const icon = state === 'done' ? 'fa-check' : state === 'current' ? 'fa-bolt' : 'fa-clock';
+            const detail = state === 'done'
+                ? 'Completado'
+                : state === 'current'
+                    ? (hasLiveRoute ? 'Estado activo' : 'En espera operativa')
+                    : 'Pendiente';
 
             return `
                 <div class="timeline-item timeline-${state}">
                     <div class="timeline-dot"><i class="fas ${icon}"></i></div>
                     <div class="timeline-content">
                         <div class="timeline-title">${step}</div>
-                        <div class="text-muted">${state === 'done' ? 'Completado' : state === 'current' ? 'Estado actual' : 'Pendiente'}</div>
+                        <div class="text-muted">${detail}</div>
                     </div>
                 </div>
             `;
@@ -473,7 +492,7 @@
         document.getElementById('trackMeta').textContent = `${origin.city}, ${origin.country} -> ${destination.name}, ${destination.country}`;
 
         clearVisuals();
-        renderTimeline(order, destination);
+        renderTimeline(order, destination, hasLiveRoute);
         renderTrackingSummary(order, destination, routeType);
 
         const mapInstance = ensureMap();
@@ -493,6 +512,7 @@
 
         const flightPath = curveBetween(startLatLng, destinationLatLng, true, -1);
         const localRoute = buildLocalRoute(startLatLng, destinationLatLng, order.tracking?.currentStep || 0);
+        const delivered = isDelivered(order);
 
         const originMarker = L.marker(startLatLng, { icon: icons.origin }).addTo(mapInstance).bindPopup(`${origin.name}<br>${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`);
         const destinationMarker = L.marker(destinationLatLng, { icon: icons.destination }).addTo(mapInstance).bindPopup(`${destination.name}<br>${destination.lat.toFixed(4)}, ${destination.lng.toFixed(4)}`);
@@ -516,7 +536,13 @@
             }).addTo(mapInstance);
 
             layers.push(routeShadow, route);
-            animateMarker(flightPath, icons.plane);
+            const activePoint = delivered
+                ? destinationLatLng
+                : currentPointForOrder(order, flightPath[Math.floor(flightPath.length * .72)]);
+            const routeMarker = L.marker(activePoint, { icon: icons.plane })
+                .addTo(mapInstance)
+                .bindPopup(delivered ? 'Pedido entregado' : 'Ubicacion actual estimada');
+            markers.push(routeMarker);
         } else {
             const operationMarker = L.marker(localRoute.operationPoint, {
                 icon: icons.courier
@@ -539,7 +565,13 @@
 
             markers.push(operationMarker);
             layers.push(firstLeg, secondLeg);
-            animateMarker(localRoute.secondLeg, icons.courier);
+            const activePoint = delivered
+                ? destinationLatLng
+                : currentPointForOrder(order, localRoute.courierLatLng);
+            const courierMarker = L.marker(activePoint, { icon: icons.courier })
+                .addTo(mapInstance)
+                .bindPopup(delivered ? 'Pedido entregado' : 'Ubicacion actual estimada');
+            markers.push(courierMarker);
         }
 
         const fitPoints = isInternational
@@ -552,19 +584,8 @@
             mapInstance.invalidateSize(true);
         });
 
-        renderTimeline(order, destination);
-
-        document.getElementById('trackingSummary').innerHTML = `
-            <div class="summary-row"><span>Origen</span><strong>${origin.name}</strong></div>
-            <div class="summary-row"><span>Cliente</span><strong>${order.customerName}</strong></div>
-            <div class="summary-row"><span>Direccion</span><strong>${order.address}</strong></div>
-            <div class="summary-row"><span>Destino visual</span><strong>${destination.name}</strong></div>
-            <div class="summary-row"><span>Latitud / longitud</span><strong>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}</strong></div>
-            <div class="summary-row"><span>Modalidad</span><strong>${routeType}</strong></div>
-            <div class="summary-row"><span>Entrega</span><strong>${new Date(order.deliveryDate).toLocaleDateString('es-CR')}</strong></div>
-            <div class="summary-row"><span>Productos</span><strong>${(order.items || []).map(i => `${i.quantity} x ${i.name}`).join(', ') || 'Sin detalle'}</strong></div>
-            <div class="summary-row"><span>Pago</span><strong>${order.paymentStatus} (${order.paymentMethod || 'Pendiente'})</strong></div>
-        `;
+        renderTimeline(order, destination, hasLiveRoute);
+        renderTrackingSummary(order, destination, routeType);
     }
 
     function renderSelector() {
