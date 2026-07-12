@@ -2,6 +2,9 @@
   const cache = new Map();
   let posSessionsCache = [];
   let activeSessionCache = null;
+  let refreshAllPromise = null;
+  let refreshAllCompletedAt = 0;
+  const refreshAllTtlMs = 15000;
 
   async function request(url, options = {}) {
     const response = await fetch(url, {
@@ -59,8 +62,15 @@
     return activeSessionCache;
   }
 
-  function refreshAll() {
-    return Promise.allSettled([
+  function refreshAll(options = {}) {
+    const force = options === true || Boolean(options.force);
+    const now = Date.now();
+    if (!force && refreshAllPromise) return refreshAllPromise;
+    if (!force && cache.size && now - refreshAllCompletedAt < refreshAllTtlMs) {
+      return Promise.resolve([]);
+    }
+
+    refreshAllPromise = Promise.allSettled([
       load("orders", "/api/orders"),
       load("inventory", "/api/inventory"),
       load("inventoryMovements", "/api/inventory/movements"),
@@ -71,7 +81,12 @@
       load("posConfig", "/api/pos/config", {}),
       load("accounting", "/api/accounting", {}),
       load("logs", "/api/logs")
-    ]);
+    ]).finally(() => {
+      refreshAllCompletedAt = Date.now();
+      refreshAllPromise = null;
+    });
+
+    return refreshAllPromise;
   }
 
   function exportCsv(fileName, rows) {

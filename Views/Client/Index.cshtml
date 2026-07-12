@@ -531,7 +531,7 @@
                 try {
                     paymentConfirmBtn.disabled = true;
                     await BakeSmartStore.orders.markPaid(pendingPayment.orderId, data.method);
-                    await BakeSmartStore.refresh();
+                    await BakeSmartStore.refresh({ force: true });
                     renderSummary();
                     app.toast.success(`Pago aprobado. Pedido #${pendingPayment.orderId} confirmado para produccion.`);
                     closePaymentGateway();
@@ -598,7 +598,7 @@
                         deliveryMethod: data.deliveryMethod
                     });
 
-                    await BakeSmartStore.refresh();
+                    await BakeSmartStore.refresh({ force: true });
                     products = BakeSmartStore.inventory.list().map(normalizeProduct);
                     document.getElementById('clientAvailableProducts').textContent =
                         products.filter(item => item.active && isSellableProduct(item) && item.stock > 0).length;

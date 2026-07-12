@@ -162,7 +162,7 @@
         <span id="cartTotal" style="color:var(--primary);font-size:1.15rem;">₡0</span>
     </div>
 
-    <a href="/Orders/Create" class="btn btn-primary btn-block" style="min-height:50px;">
+    <a href="/Orders/Create" class="btn btn-primary btn-block catalog-checkout-link" style="min-height:50px;">
         <i class="fas fa-arrow-right"></i>
         Finalizar pedido
     </a>
@@ -182,7 +182,7 @@
         <span>Total:</span>
         <span id="cartTotalDesktop" style="color:var(--primary);">₡0</span>
     </div>
-    <a href="/Orders/Create" class="btn btn-primary btn-block">
+    <a href="/Orders/Create" class="btn btn-primary btn-block catalog-checkout-link">
         <i class="fas fa-arrow-right"></i>
         Finalizar pedido
     </a>
@@ -192,6 +192,47 @@
     let currentCategory = 'all';
     let cart = [];
     let shouldAutoOpenCart = false;
+
+    const currentUserEmail = () => (document.body.dataset.userEmail || '').trim().toLowerCase();
+    const favoriteStorageKey = () => `bakesmart:favorites:${currentUserEmail()}`;
+
+    function requireLogin(message, returnUrl) {
+        if (currentUserEmail()) return true;
+        app.toast.warning(message || 'Inicia sesion para continuar.');
+        const target = returnUrl || `${window.location.pathname}${window.location.search}`;
+        window.setTimeout(() => {
+            window.location.href = `/Account/Login?ReturnUrl=${encodeURIComponent(target)}`;
+        }, 650);
+        return false;
+    }
+
+    function readFavorites() {
+        if (!currentUserEmail()) return new Set();
+        try {
+            return new Set(JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]').map(Number));
+        } catch {
+            return new Set();
+        }
+    }
+
+    function saveFavorites(ids) {
+        if (!currentUserEmail()) return;
+        localStorage.setItem(favoriteStorageKey(), JSON.stringify([...ids]));
+    }
+
+    function syncFavoriteButtons() {
+        const ids = readFavorites();
+        document.querySelectorAll('.product-card').forEach(card => {
+            const button = card.querySelector('.favorite-btn');
+            const icon = button?.querySelector('i');
+            if (!button || !icon) return;
+            const active = ids.has(Number(card.dataset.id));
+            icon.classList.toggle('far', !active);
+            icon.classList.toggle('fas', active);
+            icon.style.color = active ? '#ec4899' : '';
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    }
 
     function filterCategory(category) {
         currentCategory = category;
@@ -250,18 +291,27 @@
     });
 
     function toggleFavorite(btn) {
-        const icon = btn.querySelector('i');
-        icon.classList.toggle('far');
-        icon.classList.toggle('fas');
-        if (icon.classList.contains('fas')) {
-            icon.style.color = '#ec4899';
-            app.toast.show('Agregado a favoritos', 'success');
+        if (!requireLogin('Inicia sesion para guardar favoritos.')) return;
+        const card = btn.closest('.product-card');
+        const productId = Number(card?.dataset.id || 0);
+        const ids = readFavorites();
+        const isActive = ids.has(productId);
+        if (isActive) {
+            ids.delete(productId);
         } else {
-            icon.style.color = '';
+            ids.add(productId);
         }
+        saveFavorites(ids);
+        const icon = btn.querySelector('i');
+        icon.classList.toggle('far', isActive);
+        icon.classList.toggle('fas', !isActive);
+        icon.style.color = isActive ? '' : '#ec4899';
+        btn.setAttribute('aria-pressed', isActive ? 'false' : 'true');
+        app.toast.show(isActive ? 'Eliminado de favoritos' : 'Agregado a favoritos', 'success');
     }
 
     function addProductButton(button) {
+        if (!requireLogin('Inicia sesion para ordenar productos.')) return;
         addToCart(Number(button.dataset.id), button.dataset.name, Number(button.dataset.price));
     }
 
@@ -356,6 +406,15 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        syncFavoriteButtons();
+        document.querySelectorAll('.catalog-checkout-link').forEach(link => {
+            link.addEventListener('click', event => {
+                if (!requireLogin('Inicia sesion para finalizar el pedido.', '/Orders/Create')) {
+                    event.preventDefault();
+                }
+            });
+        });
+
         const parameters = new URLSearchParams(window.location.search);
         const search = parameters.get('search');
         const category = parameters.get('category');

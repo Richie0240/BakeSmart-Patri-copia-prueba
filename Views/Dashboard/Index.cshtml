@@ -20,6 +20,8 @@
     var roleTitle = isAdmin ? "Centro de administracion" : isCashier ? "Caja y ventas" : isBaker ? "Produccion de reposteria" : isSupervisor ? "Supervision general" : "Operacion diaria";
     var roleSubtitle = isAdmin ? "Una lectura completa de ventas, pedidos, inventario y operacion." : isCashier ? "Controla caja, pedidos y cobros desde un espacio enfocado." : isBaker ? "Organiza la produccion y anticipa necesidades de inventario." : isSupervisor ? "Supervisa el rendimiento de cada area y toma decisiones con datos." : "Coordina pedidos y el trabajo diario desde un solo lugar.";
     var roleIcon = isAdmin ? "fa-crown" : isCashier ? "fa-cash-register" : isBaker ? "fa-cake-candles" : isSupervisor ? "fa-chart-line" : "fa-store";
+    var displayName = User?.FindFirst("FullName")?.Value ?? User?.Identity?.Name ?? roleLabel;
+    var todayLabel = DateTime.Now.ToString("dddd, dd 'de' MMMM", new System.Globalization.CultureInfo("es-CR"));
 }
 
 @section Styles {
@@ -38,6 +40,24 @@
             @if (canReports) { <a class="btn btn-outline" href="/Reports"><i class="fas fa-chart-column"></i> Reportes</a> }
             @if (canAudit) { <a class="btn btn-outline" href="/Audit"><i class="fas fa-clock-rotate-left"></i> Bitacora</a> }
         </div>
+        <aside class="dashboard-welcome-card" aria-label="Resumen de sesion">
+            <div class="dashboard-welcome-user">
+                <span>@displayName.Substring(0, 1).ToUpperInvariant()</span>
+                <div>
+                    <small>Bienvenido</small>
+                    <strong>@displayName</strong>
+                </div>
+            </div>
+            <div class="dashboard-welcome-meta">
+                <div><i class="fas fa-id-badge"></i><span>@roleLabel</span></div>
+                <div><i class="fas fa-calendar-day"></i><span>@todayLabel</span></div>
+            </div>
+            <div class="dashboard-welcome-actions">
+                @if (canOrders) { <a href="/Orders"><i class="fas fa-clipboard-list"></i> Pedidos</a> }
+                @if (canInventory) { <a href="/Inventory"><i class="fas fa-boxes-stacked"></i> Inventario</a> }
+                @if (canProduction) { <a href="/Production"><i class="fas fa-fire-burner"></i> Produccion</a> }
+            </div>
+        </aside>
     </header>
 
     <section class="dashboard-kpis" aria-label="Indicadores principales">
