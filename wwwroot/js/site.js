@@ -1054,6 +1054,7 @@
         },
 
         spawnParticles() {
+            return;
             const container = $('#bgParticles');
             if (!container || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
@@ -1080,6 +1081,7 @@
         },
 
         setupCursorGlow() {
+            return;
             const glow = $('.cursor-glow');
             if (!glow || window.innerWidth < 1024) return;
 

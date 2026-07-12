@@ -2461,13 +2461,13 @@ public sealed class SqlStore
                  Notes, Subtotal, Discount, Tax, Total, DeliveryDate,
                  CurrentLatitude, CurrentLongitude,
                  DestinationLatitude, DestinationLongitude, DestinationLabel, DestinationCountry,
-                 RouteMode, OriginLabel, DeliveryReference)
+                 RouteMode, OriginLabel)
             VALUES
                 (@CustomerId, @ResolvedAddressId, @WebChannelId, @PendingStatusId, @PendingPaymentId, @CashMethodId,
                  @Notes, @Subtotal, @EffectiveDiscount, @EffectiveTax, @EffectiveTotal, @DeliveryDate,
                  @OriginLat, @OriginLng,
                  @DestLat, @DestLng, @DestLabel, N'Costa Rica',
-                 CASE WHEN @DeliveryMethod = N'retiro' THEN N'pickup' ELSE N'ground' END, @OriginName, @DeliveryReference);
+                 CASE WHEN @DeliveryMethod = N'retiro' THEN N'pickup' ELSE N'ground' END, @OriginName);
 
             DECLARE @OrderId int = SCOPE_IDENTITY();
 
@@ -2490,6 +2490,13 @@ public sealed class SqlStore
             SELECT @OrderId;
             """;
 
+        var notes = input.Notes?.Trim();
+        if (!string.IsNullOrWhiteSpace(input.DeliveryReference))
+        {
+            var deliveryReference = $"Referencia de entrega: {input.DeliveryReference.Trim()}";
+            notes = string.IsNullOrWhiteSpace(notes) ? deliveryReference : $"{notes}\n{deliveryReference}";
+        }
+
         var orderId = Convert.ToInt32(await ScalarAsync(sql,
             new SqlParameter("@CustomerName", input.CustomerName.Trim()),
             new SqlParameter("@Email", input.Email.Trim().ToLowerInvariant()),
@@ -2502,11 +2509,10 @@ public sealed class SqlStore
             new SqlParameter("@Total", input.Total),
             new SqlParameter("@DeliveryDate", input.DeliveryDate),
             new SqlParameter("@Address", (object?)input.Address?.Trim() ?? DBNull.Value),
-            new SqlParameter("@Notes", (object?)input.Notes?.Trim() ?? DBNull.Value),
+            new SqlParameter("@Notes", (object?)notes ?? DBNull.Value),
             new SqlParameter("@PaymentMethod", (object?)input.PaymentMethod?.Trim() ?? "Pendiente"),
             new SqlParameter("@DestinationLatitude", (object?)input.DestinationLatitude ?? DBNull.Value),
             new SqlParameter("@DestinationLongitude", (object?)input.DestinationLongitude ?? DBNull.Value),
-            new SqlParameter("@DeliveryReference", (object?)input.DeliveryReference?.Trim() ?? DBNull.Value),
             new SqlParameter("@CustomerAddressId", (object?)input.CustomerAddressId ?? DBNull.Value),
             new SqlParameter("@DeliveryMethod", (object?)input.DeliveryMethod?.Trim() ?? "domicilio")));
 

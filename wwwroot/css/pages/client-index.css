@@ -539,6 +539,53 @@
     box-shadow: var(--shadow-lg);
 }
 
+.quick-address-modal__dialog {
+    width: min(820px, 100%);
+}
+
+.quick-address-choice {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .85rem;
+    align-items: center;
+    padding: .85rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-light) 24%, var(--bg));
+}
+
+.quick-address-choice span,
+.quick-address-picker label span {
+    display: block;
+    margin-bottom: .32rem;
+    color: var(--text-light);
+    font-size: .78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.quick-address-choice strong {
+    display: block;
+    color: var(--text);
+    line-height: 1.35;
+}
+
+.quick-address-picker {
+    display: grid;
+    gap: .8rem;
+}
+
+.quick-address-map .map-picker__canvas {
+    height: 320px;
+}
+
+.quick-address-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: .7rem;
+    flex-wrap: wrap;
+}
+
 .payment-modal__close {
     position: absolute;
     top: .75rem;
@@ -725,5 +772,15 @@ html.dark-start .payment-modal__close {
 
     .payment-form__grid {
         grid-template-columns: 1fr;
+    }
+
+    .quick-address-choice,
+    .quick-address-modal__actions {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-address-choice .btn,
+    .quick-address-modal__actions .btn {
+        width: 100%;
     }
 }

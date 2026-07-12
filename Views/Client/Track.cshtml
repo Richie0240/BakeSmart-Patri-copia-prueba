@@ -74,7 +74,7 @@
             </div>
 
             <div class="card">
-                <h3 class="track-section-title track-summary-title">Resumen logÃ­stico</h3>
+            <h3 class="track-section-title track-summary-title">Resumen logistico</h3>
                 <div id="trackingSummary" class="tracking-summary text-muted"></div>
             </div>
         </div>
@@ -273,7 +273,7 @@
     function renderTimeline(order, destination) {
         const currentStep = order.tracking.currentStep || 0;
         const isInternational = destination.country !== 'Costa Rica';
-        const extraLabel = isInternational ? 'Salida aÃ©rea internacional' : 'Ruta terrestre metropolitana';
+        const extraLabel = isInternational ? 'Salida aerea internacional' : 'Ruta terrestre metropolitana';
         const steps = [...order.tracking.steps];
 
         if (!steps.includes(extraLabel)) {
@@ -341,7 +341,7 @@
 
         const destination = activePreset(order);
         const isInternational = destination.country !== 'Costa Rica';
-        const routeType = isInternational ? 'Trayectoria aÃ©rea' : 'Trayecto local';
+        const routeType = isInternational ? 'Trayectoria aerea' : 'Trayecto local';
         document.getElementById('trackOrderId').textContent = `#${order.id}`;
         document.getElementById('trackStatus').textContent = order.status;
         document.getElementById('trackRouteType').textContent = routeType;
@@ -391,7 +391,7 @@
         } else {
             const operationMarker = L.marker(localRoute.operationPoint, {
                 icon: icons.courier
-            }).addTo(mapInstance).bindPopup('OperaciÃ³n local');
+            }).addTo(mapInstance).bindPopup('Operacion local');
 
             const firstLeg = L.polyline(localRoute.firstLeg, {
                 color: '#f59e0b',
@@ -428,7 +428,7 @@
         document.getElementById('trackingSummary').innerHTML = `
             <div class="summary-row"><span>Origen</span><strong>${origin.name}</strong></div>
             <div class="summary-row"><span>Cliente</span><strong>${order.customerName}</strong></div>
-            <div class="summary-row"><span>DirecciÃ³n</span><strong>${order.address}</strong></div>
+            <div class="summary-row"><span>Direccion</span><strong>${order.address}</strong></div>
             <div class="summary-row"><span>Destino visual</span><strong>${destination.name}</strong></div>
             <div class="summary-row"><span>Latitud / longitud</span><strong>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}</strong></div>
             <div class="summary-row"><span>Modalidad</span><strong>${routeType}</strong></div>
@@ -441,12 +441,44 @@
     function renderSelector() {
         const orders = getOrders();
 
+        if (!orders.length) {
+            orderSelect.innerHTML = '<option>Sin pedidos</option>';
+            orderSelect.disabled = true;
+            presetSelect.innerHTML = presetOptions.map(p =>
+                `<option value="${p.id}">${p.name}${p.country && p.country !== '-' ? ` - ${p.country}` : ''}</option>`
+            ).join('');
+            presetSelect.disabled = true;
+            document.getElementById('trackOrderId').textContent = '-';
+            document.getElementById('trackStatus').textContent = 'Sin actividad';
+            document.getElementById('trackRouteType').textContent = '-';
+            document.getElementById('trackDestinationCountry').textContent = '-';
+            document.getElementById('trackMeta').textContent = 'Todavia no hay pedidos para mostrar.';
+            document.getElementById('deliveryMap').innerHTML = `
+                <div class="track-empty-state">
+                    <i class="fas fa-box-open"></i>
+                    <strong>No tienes pedidos en seguimiento</strong>
+                    <span>Cuando registres un pedido, aqui veras su ruta y progreso.</span>
+                </div>
+            `;
+            document.getElementById('trackingTimeline').innerHTML = `
+                <div class="track-empty-state track-empty-state--compact">
+                    <i class="fas fa-route"></i>
+                    <strong>Sin recorrido activo</strong>
+                    <span>El seguimiento se activa despues de crear un pedido.</span>
+                </div>
+            `;
+            document.getElementById('trackingSummary').innerHTML = `
+                <div class="summary-row"><span>Estado</span><strong>Sin pedidos registrados</strong></div>
+            `;
+            return;
+        }
+
         orderSelect.innerHTML = orders.map(o =>
-            `<option value="${o.id}">#${o.id} Â· ${o.customerName} Â· ${o.status}</option>`
+            `<option value="${o.id}">#${o.id} - ${o.customerName} - ${o.status}</option>`
         ).join('');
 
         presetSelect.innerHTML = presetOptions.map(p =>
-            `<option value="${p.id}">${p.name}${p.country && p.country !== '-' ? ` Â· ${p.country}` : ''}</option>`
+            `<option value="${p.id}">${p.name}${p.country && p.country !== '-' ? ` - ${p.country}` : ''}</option>`
         ).join('');
 
         renderOrder(orders[0]?.id);
