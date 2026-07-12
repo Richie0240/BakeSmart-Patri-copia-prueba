@@ -5,6 +5,7 @@
   let refreshAllPromise = null;
   let refreshAllCompletedAt = 0;
   const refreshAllTtlMs = 15000;
+  const persistentCacheTtlMs = 5 * 60 * 1000;
 
   async function request(url, options = {}) {
     const method = String(options.method || "GET").toUpperCase();
@@ -44,20 +45,72 @@
     return response.status === 204 ? null : response.json();
   }
 
-  async function load(key, url, fallback = []) {
-    const data = await request(url);
+  function persistentKey(key) {
+    return `bakesmart.store.${key}`;
+  }
+
+  function readPersistent(key) {
+    try {
+      const raw = sessionStorage.getItem(persistentKey(key));
+      if (!raw) return null;
+      const entry = JSON.parse(raw);
+      if (!entry || Date.now() - Number(entry.time || 0) > persistentCacheTtlMs) return null;
+      return entry.data;
+    } catch {
+      return null;
+    }
+  }
+
+  function writePersistent(key, data) {
+    try {
+      sessionStorage.setItem(persistentKey(key), JSON.stringify({ time: Date.now(), data }));
+    } catch { }
+  }
+
+  function publish(key, data) {
     cache.set(key, data);
+    writePersistent(key, data);
     window.dispatchEvent(new CustomEvent("bakesmart:data-ready", { detail: { key } }));
     return data;
+  }
+
+  async function load(key, url, fallback = [], options = {}) {
+    const force = Boolean(options.force);
+    const cachedData = cache.has(key) ? cache.get(key) : readPersistent(key);
+
+    if (!force && cachedData != null) {
+      cache.set(key, cachedData);
+      request(url)
+        .then(data => publish(key, data))
+        .catch(() => { });
+      return cachedData;
+    }
+
+    const data = await request(url);
+    return publish(key, data);
   }
 
   function cached(key, fallback = []) {
     return cache.has(key) ? cache.get(key) : fallback;
   }
 
-  async function loadPosSessions() {
+  async function loadPosSessions(options = {}) {
+    const force = Boolean(options.force);
+    const cachedSessions = readPersistent("posSessions");
+    if (!force && cachedSessions) {
+      posSessionsCache = cachedSessions;
+      activeSessionCache = posSessionsCache.find(s => normalizeStatus(s.status).startsWith("abiert")) || null;
+      request("/api/pos/sessions")
+        .then(data => {
+          posSessionsCache = publish("posSessions", data);
+          activeSessionCache = posSessionsCache.find(s => normalizeStatus(s.status).startsWith("abiert")) || null;
+        })
+        .catch(() => { });
+      return posSessionsCache;
+    }
+
     try {
-      posSessionsCache = await request("/api/pos/sessions");
+      posSessionsCache = publish("posSessions", await request("/api/pos/sessions"));
       activeSessionCache = posSessionsCache.find(s => normalizeStatus(s.status).startsWith("abiert")) || null;
     } catch {
       posSessionsCache = [];
@@ -79,16 +132,16 @@
   }
 
   const loaders = {
-    orders: () => load("orders", "/api/orders"),
-    inventory: () => load("inventory", "/api/inventory"),
-    inventoryMovements: () => load("inventoryMovements", "/api/inventory/movements"),
-    customers: () => load("customers", "/api/customers"),
-    promotions: () => load("promotions", "/api/promotions"),
-    users: () => load("users", "/api/users"),
-    roles: () => load("roles", "/api/roles"),
-    posConfig: () => load("posConfig", "/api/pos/config", {}),
-    accounting: () => load("accounting", "/api/accounting", {}),
-    logs: () => load("logs", "/api/logs")
+    orders: options => load("orders", "/api/orders", [], options),
+    inventory: options => load("inventory", "/api/inventory", [], options),
+    inventoryMovements: options => load("inventoryMovements", "/api/inventory/movements", [], options),
+    customers: options => load("customers", "/api/customers", [], options),
+    promotions: options => load("promotions", "/api/promotions", [], options),
+    users: options => load("users", "/api/users", [], options),
+    roles: options => load("roles", "/api/roles", [], options),
+    posConfig: options => load("posConfig", "/api/pos/config", {}, options),
+    accounting: options => load("accounting", "/api/accounting", {}, options),
+    logs: options => load("logs", "/api/logs", [], options)
   };
 
   function refreshKeysForCurrentPage() {
@@ -120,7 +173,10 @@
     }
 
     const missingOrForcedKeys = force ? keys : keys.filter(key => !cache.has(key) || now - refreshAllCompletedAt >= refreshAllTtlMs);
-    refreshAllPromise = Promise.allSettled(missingOrForcedKeys.map(key => loaders[key]?.()).filter(Boolean)).finally(() => {
+    refreshAllPromise = Promise.allSettled(missingOrForcedKeys.map(key => {
+      const loader = loaders[key];
+      return loader ? loader({ force }) : null;
+    }).filter(Boolean)).finally(() => {
       refreshAllCompletedAt = Date.now();
       refreshAllPromise = null;
     });
@@ -252,15 +308,15 @@
       },
       async updateStatus(id, status) {
         await request(`/api/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
-        return load("orders", "/api/orders");
+        return load("orders", "/api/orders", [], { force: true });
       },
       async markPaid(id, method = "Efectivo") {
         await request(`/api/orders/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) });
-        return load("orders", "/api/orders");
+        return load("orders", "/api/orders", [], { force: true });
       },
       async delete(id) {
         await request(`/api/orders/${id}`, { method: "DELETE" });
-        return load("orders", "/api/orders");
+        return load("orders", "/api/orders", [], { force: true });
       },
       create() {
         throw new Error("Crear pedidos debe hacerse desde el formulario del sistema.");
@@ -304,7 +360,7 @@
       },
       async addFrequent(id) {
         await request(`/api/customers/${id}/frequent`, { method: "POST", body: JSON.stringify({}) });
-        return load("customers", "/api/customers");
+        return load("customers", "/api/customers", [], { force: true });
       }
     },
     marketing: {
@@ -321,12 +377,12 @@
             isActive: input.isActive !== false
           })
         });
-        await load("promotions", "/api/promotions");
+        await load("promotions", "/api/promotions", [], { force: true });
         return result;
       },
       async togglePromotion(id) {
         await request(`/api/promotions/${id}/toggle`, { method: "POST", body: JSON.stringify({}) });
-        return load("promotions", "/api/promotions");
+        return load("promotions", "/api/promotions", [], { force: true });
       },
       async sendCampaign(input = {}) {
         return request("/api/marketing/campaigns", {
@@ -354,12 +410,12 @@
         };
 
         const result = await request("/api/users", { method: "POST", body: JSON.stringify(payload) });
-        await load("users", "/api/users");
+        await load("users", "/api/users", [], { force: true });
         return result;
       },
       async toggle(id) {
         await request(`/api/users/${id}/toggle`, { method: "POST", body: JSON.stringify({}) });
-        const rows = await load("users", "/api/users");
+        const rows = await load("users", "/api/users", [], { force: true });
         return rows.find(user => Number(user.id) === Number(id));
       }
     },
@@ -396,12 +452,12 @@
       },
       async openSession(amount = 0) {
         const result = await request("/api/pos/open", { method: "POST", body: JSON.stringify({ amount: Number(amount) }) });
-        await loadPosSessions();
+        await loadPosSessions({ force: true });
         return result;
       },
       async closeSession(id, declared = 0) {
         const result = await request("/api/pos/close", { method: "POST", body: JSON.stringify({ id: Number(id), declaredAmount: Number(declared) }) });
-        await loadPosSessions();
+        await loadPosSessions({ force: true });
         return result;
       },
       async savePaymentMethod(input = {}) {
@@ -415,12 +471,12 @@
             account: input.account || ""
           })
         });
-        await load("posConfig", "/api/pos/config", {});
+        await load("posConfig", "/api/pos/config", {}, { force: true });
         return result;
       },
       async togglePaymentMethod(id) {
         await request(`/api/pos/payment-methods/${id}/toggle`, { method: "POST", body: JSON.stringify({}) });
-        return load("posConfig", "/api/pos/config", {});
+        return load("posConfig", "/api/pos/config", {}, { force: true });
       },
       async creditNote(input = {}) {
         return request("/api/pos/credit-notes", {
@@ -432,7 +488,7 @@
         });
       },
       async sell(input = {}) {
-        await loadPosSessions();
+        await loadPosSessions({ force: true });
         const session = activePosSession();
         if (!session) throw new Error("Debe abrir caja antes de confirmar ventas.");
 
@@ -476,8 +532,8 @@
 
         const result = await request("/api/pos/sell", { method: "POST", body: JSON.stringify(saleInput) });
         await loadPosSessions();
-        await load("inventory", "/api/inventory");
-        await load("inventoryMovements", "/api/inventory/movements");
+        await load("inventory", "/api/inventory", [], { force: true });
+        await load("inventoryMovements", "/api/inventory/movements", [], { force: true });
         return result;
       }
     },
@@ -486,7 +542,7 @@
       entries() { return api.accounting.overview().entries || []; },
       expenses() { return Array.from({ length: Number(api.accounting.overview().expensesCount || 0) }); },
       supplierPayments() { return Array.from({ length: Number(api.accounting.overview().supplierPaymentsCount || 0) }); },
-      async refresh() { return load("accounting", "/api/accounting", {}); },
+      async refresh() { return load("accounting", "/api/accounting", {}, { force: true }); },
       async addExpense(input = {}) {
         const result = await request("/api/accounting/expenses", {
           method: "POST",

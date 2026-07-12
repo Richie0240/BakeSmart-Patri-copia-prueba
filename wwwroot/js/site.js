@@ -1177,6 +1177,108 @@
         }
     };
 
+    app.selects = {
+        init() {
+            this.enhanceAll();
+            if (this._observer) return;
+            this._observer = new MutationObserver(() => this.enhanceAll());
+            this._observer.observe(document.body, { childList: true, subtree: true });
+            document.addEventListener('click', event => {
+                if (!event.target.closest('.bs-select')) this.closeAll();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') this.closeAll();
+            });
+        },
+
+        enhanceAll() {
+            $$('select:not([multiple]):not([size])').forEach(select => this.enhance(select));
+        },
+
+        enhance(select) {
+            if (!select || select.dataset.bsSelectReady === 'true' || select.closest('.bs-select')) return;
+            select.dataset.bsSelectReady = 'true';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bs-select';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'bs-select__button';
+            button.setAttribute('aria-haspopup', 'listbox');
+            button.setAttribute('aria-expanded', 'false');
+
+            const label = document.createElement('span');
+            label.className = 'bs-select__label';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-chevron-down';
+            button.append(label, icon);
+
+            const menu = document.createElement('div');
+            menu.className = 'bs-select__menu';
+            menu.hidden = true;
+            menu.setAttribute('role', 'listbox');
+
+            select.parentNode.insertBefore(wrapper, select);
+            wrapper.append(select, button, menu);
+            select.classList.add('bs-select__native');
+
+            const render = () => {
+                label.textContent = select.options[select.selectedIndex]?.text || select.getAttribute('placeholder') || 'Seleccionar';
+                menu.innerHTML = '';
+                [...select.options].forEach(option => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'bs-select__option';
+                    item.setAttribute('role', 'option');
+                    item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+                    item.dataset.value = option.value;
+                    item.textContent = option.text;
+                    if (option.disabled) item.disabled = true;
+                    item.addEventListener('click', event => {
+                        event.preventDefault();
+                        select.value = option.value;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                        this.close(wrapper);
+                        render();
+                    });
+                    menu.appendChild(item);
+                });
+            };
+
+            button.addEventListener('click', event => {
+                event.preventDefault();
+                if (select.disabled) return;
+                render();
+                const isOpen = wrapper.classList.contains('is-open');
+                this.closeAll();
+                if (!isOpen) this.open(wrapper);
+            });
+
+            select.addEventListener('change', render);
+            render();
+        },
+
+        open(wrapper) {
+            const button = $('.bs-select__button', wrapper);
+            const menu = $('.bs-select__menu', wrapper);
+            wrapper.classList.add('is-open');
+            button?.setAttribute('aria-expanded', 'true');
+            if (menu) menu.hidden = false;
+        },
+
+        close(wrapper) {
+            const button = $('.bs-select__button', wrapper);
+            const menu = $('.bs-select__menu', wrapper);
+            wrapper.classList.remove('is-open');
+            button?.setAttribute('aria-expanded', 'false');
+            if (menu) menu.hidden = true;
+        },
+
+        closeAll() {
+            $$('.bs-select.is-open').forEach(wrapper => this.close(wrapper));
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         app.theme.init();
         app.navigation.init();
@@ -1184,6 +1286,7 @@
         app.mobileNav.init();
         app.dropdown.init();
         app.userMenu.init();
+        app.selects.init();
         app.copy.init();
         app.motion.init();
 

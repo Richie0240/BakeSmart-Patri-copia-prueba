@@ -715,19 +715,19 @@
         }
     </style>
 
-    <button id="chat-toggle-btn" aria-label="Abrir chat"><i class="fas fa-comment-dots"></i></button>
+    <button id="chat-toggle-btn" aria-label="Abrir chat"><img src="~/img/richie-bot.png" alt="" /><span>Richie</span></button>
 
     <div id="chat-widget">
         <div id="chat-header">
-            <div class="avatar"><i class="fas fa-cookie-bite"></i></div>
+            <div class="avatar"><img src="~/img/richie-bot.png" alt="Richie" /></div>
             <div>
                 <strong>Richie</strong>
-                <small>Asistente de BakeSmart Patri</small>
+                <small>Asistente pastelero</small>
             </div>
         </div>
         <div id="chat-box"></div>
         <div id="chat-input-row">
-            <input id="chat-input" placeholder="Escribi tu mensaje..." />
+            <input id="chat-input" placeholder="Pregunta por queques, cupcakes o pedidos..." />
             <button id="chat-send" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
         </div>
     </div>
@@ -743,7 +743,7 @@
         toggleBtn.addEventListener('click', () => {
         widget.classList.toggle('open');
         if (widget.classList.contains('open') && box.children.length === 0) {
-        addMsg('bot', 'Hola, soy Richie. En que te puedo ayudar hoy?');
+        addMsg('bot', 'Hola, soy Richie 🧁 ¿Buscamos algo dulce para hoy?');
         }
         });
 
@@ -761,7 +761,7 @@
         if (!msg) return;
         input.value = '';
         addMsg('user', msg);
-        const typingEl = addMsg('typing', 'Richie esta escribiendo...');
+        const typingEl = addMsg('typing', 'Richie esta decorando la respuesta... 🍰');
 
         try {
         const res = await fetch('/api/chat', {
@@ -774,7 +774,7 @@
         addMsg('bot', data.reply);
         } catch (err) {
         typingEl.remove();
-        addMsg('bot', 'Uy, tuve un problema para responder. Proba de nuevo en un momento.');
+        addMsg('bot', 'Uy, se me cayo un poquito de merengue 🍰 Proba de nuevo en un momento.');
         }
         }
 
