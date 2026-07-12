@@ -596,13 +596,17 @@
     geo: {
       origin() {
         const config = cached("posConfig", {});
+        const defaultLat = 9.9281;
+        const defaultLng = -84.0907;
+        const lat = Number(config.originLatitude);
+        const lng = Number(config.originLongitude);
         return {
           name: config.originName || "BakeSmart Patri",
           address: config.originAddress || "",
           city: "San Jose",
           country: "Costa Rica",
-          lat: Number(config.originLatitude),
-          lng: Number(config.originLongitude)
+          lat: Number.isFinite(lat) ? lat : defaultLat,
+          lng: Number.isFinite(lng) ? lng : defaultLng
         };
       },
       presets() {
@@ -610,9 +614,11 @@
       },
       resolveDestination(address, preset = {}) {
         const origin = api.geo.origin();
+        const lat = Number(preset.lat || preset.latitude);
+        const lng = Number(preset.lng || preset.longitude);
         return {
-          lat: Number(preset.lat || preset.latitude || origin.lat),
-          lng: Number(preset.lng || preset.longitude || origin.lng),
+          lat: Number.isFinite(lat) ? lat : origin.lat,
+          lng: Number.isFinite(lng) ? lng : origin.lng,
           name: address || preset.name || "Destino",
           label: address || preset.name || "Destino",
           country: preset.country || "Costa Rica"

@@ -88,10 +88,18 @@
 <script>
 (() => {
     const page = document.getElementById('trackPage');
-    const origin = BakeSmartStore.geo.origin();
+    const defaultOrigin = {
+        name: 'BakeSmart Patri',
+        address: '',
+        city: 'San Jose',
+        country: 'Costa Rica',
+        lat: 9.9281,
+        lng: -84.0907
+    };
     const presetSelect = document.getElementById('trackPresetSelect');
     const orderSelect = document.getElementById('trackOrderSelect');
     const userEmail = document.body.dataset.userEmail || '';
+    let origin = sanitizeLocation(BakeSmartStore.geo.origin(), defaultOrigin);
 
     const presetOptions = [
         { id: 'auto', name: 'Destino real del pedido', country: '-' },
@@ -105,6 +113,32 @@
     let activeOrderId = null;
     let activeAnimatedMarker = null;
     let pageInitialized = false;
+
+    function isValidCoordinate(lat, lng) {
+        const latitude = Number(lat);
+        const longitude = Number(lng);
+        return Number.isFinite(latitude) &&
+            Number.isFinite(longitude) &&
+            latitude >= -90 && latitude <= 90 &&
+            longitude >= -180 && longitude <= 180;
+    }
+
+    function sanitizeLocation(location, fallback) {
+        const source = location || {};
+        const safeFallback = fallback || defaultOrigin;
+        const lat = Number(source.lat ?? source.latitude);
+        const lng = Number(source.lng ?? source.longitude);
+        return {
+            ...safeFallback,
+            ...source,
+            name: source.name || source.label || safeFallback.name || 'Destino',
+            label: source.label || source.name || safeFallback.label || safeFallback.name || 'Destino',
+            country: source.country || safeFallback.country || 'Costa Rica',
+            city: source.city || safeFallback.city || '',
+            lat: isValidCoordinate(lat, lng) ? lat : safeFallback.lat,
+            lng: isValidCoordinate(lat, lng) ? lng : safeFallback.lng
+        };
+    }
 
     function showPage() {
         page.classList.remove('track-page--loading');
@@ -151,6 +185,7 @@
     function ensureMap() {
         if (!window.L) return null;
         if (map) return map;
+        origin = sanitizeLocation(origin, defaultOrigin);
 
         map = L.map('deliveryMap', {
             zoomControl: true,
@@ -258,23 +293,30 @@
 
     function activePreset(order) {
         const presetId = presetSelect.value;
+        const tracking = order.tracking || {};
+        const destinationFallback = {
+            ...origin,
+            name: order.address || 'Destino del pedido',
+            label: order.address || 'Destino del pedido',
+            country: 'Costa Rica'
+        };
 
         if (!presetId || presetId === 'auto') {
-            return BakeSmartStore.geo.resolveDestination(order.address, {
-                lat: order.tracking.destinationLat,
-                lng: order.tracking.destinationLng
-            });
+            return sanitizeLocation(BakeSmartStore.geo.resolveDestination(order.address, {
+                lat: tracking.destinationLat,
+                lng: tracking.destinationLng
+            }), destinationFallback);
         }
 
         const preset = BakeSmartStore.geo.presets().find(p => p.id === presetId);
-        return BakeSmartStore.geo.resolveDestination(preset?.name || order.address, preset || {});
+        return sanitizeLocation(BakeSmartStore.geo.resolveDestination(preset?.name || order.address, preset || {}), destinationFallback);
     }
 
     function renderTimeline(order, destination) {
-        const currentStep = order.tracking.currentStep || 0;
+        const currentStep = order.tracking?.currentStep || 0;
         const isInternational = destination.country !== 'Costa Rica';
         const extraLabel = isInternational ? 'Salida aerea internacional' : 'Ruta terrestre metropolitana';
-        const steps = [...order.tracking.steps];
+        const steps = [...(order.tracking?.steps || ['Pedido recibido', 'Confirmado', 'En produccion', 'Listo', 'Entregado'])];
 
         if (!steps.includes(extraLabel)) {
             steps.splice(4, 0, extraLabel);
@@ -306,7 +348,7 @@
             <div class="summary-row"><span>Latitud / longitud</span><strong>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}</strong></div>
             <div class="summary-row"><span>Modalidad</span><strong>${routeType}</strong></div>
             <div class="summary-row"><span>Entrega</span><strong>${new Date(order.deliveryDate).toLocaleDateString('es-CR')}</strong></div>
-            <div class="summary-row"><span>Productos</span><strong>${order.items.map(i => `${i.quantity} x ${i.name}`).join(', ')}</strong></div>
+            <div class="summary-row"><span>Productos</span><strong>${(order.items || []).map(i => `${i.quantity} x ${i.name}`).join(', ') || 'Sin detalle'}</strong></div>
             <div class="summary-row"><span>Pago</span><strong>${order.paymentStatus} (${order.paymentMethod || 'Pendiente'})</strong></div>
         `;
     }
@@ -353,17 +395,17 @@
         renderTrackingSummary(order, destination, routeType);
 
         const mapInstance = ensureMap();
-        if (!mapInstance) {
+        const startLatLng = [origin.lat, origin.lng];
+        const destinationLatLng = [destination.lat, destination.lng];
+        if (!mapInstance || !isValidCoordinate(startLatLng[0], startLatLng[1]) || !isValidCoordinate(destinationLatLng[0], destinationLatLng[1])) {
             renderMapFallback(order, destination, routeType);
             return;
         }
 
         const icons = getIcons();
 
-        const startLatLng = [origin.lat, origin.lng];
-        const destinationLatLng = [destination.lat, destination.lng];
         const flightPath = curveBetween(startLatLng, destinationLatLng, true, -1);
-        const localRoute = buildLocalRoute(startLatLng, destinationLatLng, order.tracking.currentStep || 0);
+        const localRoute = buildLocalRoute(startLatLng, destinationLatLng, order.tracking?.currentStep || 0);
 
         const originMarker = L.marker(startLatLng, { icon: icons.origin }).addTo(mapInstance).bindPopup(`${origin.name}<br>${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`);
         const destinationMarker = L.marker(destinationLatLng, { icon: icons.destination }).addTo(mapInstance).bindPopup(`${destination.name}<br>${destination.lat.toFixed(4)}, ${destination.lng.toFixed(4)}`);
@@ -433,7 +475,7 @@
             <div class="summary-row"><span>Latitud / longitud</span><strong>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}</strong></div>
             <div class="summary-row"><span>Modalidad</span><strong>${routeType}</strong></div>
             <div class="summary-row"><span>Entrega</span><strong>${new Date(order.deliveryDate).toLocaleDateString('es-CR')}</strong></div>
-            <div class="summary-row"><span>Productos</span><strong>${order.items.map(i => `${i.quantity} x ${i.name}`).join(', ')}</strong></div>
+            <div class="summary-row"><span>Productos</span><strong>${(order.items || []).map(i => `${i.quantity} x ${i.name}`).join(', ') || 'Sin detalle'}</strong></div>
             <div class="summary-row"><span>Pago</span><strong>${order.paymentStatus} (${order.paymentMethod || 'Pendiente'})</strong></div>
         `;
     }
@@ -492,7 +534,8 @@
         pageInitialized = true;
 
         try {
-            await BakeSmartStore.refresh();
+            await BakeSmartStore.refresh({ keys: ['orders', 'posConfig'] });
+            origin = sanitizeLocation(BakeSmartStore.geo.origin(), defaultOrigin);
             renderSelector();
         } finally {
             requestAnimationFrame(() => {

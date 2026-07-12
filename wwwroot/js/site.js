@@ -1183,7 +1183,21 @@
         init() {
             this.enhanceAll();
             if (this._observer) return;
-            this._observer = new MutationObserver(() => this.enhanceAll());
+            this._observer = new MutationObserver(mutations => {
+                const shouldEnhance = mutations.some(mutation =>
+                    Array.from(mutation.addedNodes || []).some(node => {
+                        if (node.nodeType !== 1 || node.closest?.('.bs-select')) return false;
+                        return node.matches?.('select:not([multiple]):not([size])') ||
+                            node.querySelector?.('select:not([multiple]):not([size])');
+                    })
+                );
+                if (!shouldEnhance || this._enhanceScheduled) return;
+                this._enhanceScheduled = true;
+                requestAnimationFrame(() => {
+                    this._enhanceScheduled = false;
+                    this.enhanceAll();
+                });
+            });
             this._observer.observe(document.body, { childList: true, subtree: true });
             document.addEventListener('click', event => {
                 if (!event.target.closest('.bs-select')) this.closeAll();
@@ -1273,14 +1287,14 @@
                 const availableAbove = rect.top - 10;
                 const openAbove = availableBelow < 180 && availableAbove > availableBelow;
                 menu.hidden = false;
-                menu.style.position = 'fixed';
-                menu.style.left = `${Math.max(8, rect.left)}px`;
-                menu.style.width = `${Math.max(180, rect.width)}px`;
-                menu.style.right = 'auto';
-                menu.style.top = openAbove ? 'auto' : `${rect.bottom + 6}px`;
-                menu.style.bottom = openAbove ? `${window.innerHeight - rect.top + 6}px` : 'auto';
-                menu.style.maxHeight = `${Math.max(150, Math.min(280, openAbove ? availableAbove : availableBelow))}px`;
-                menu.style.zIndex = '40000';
+                menu.style.setProperty('position', 'fixed', 'important');
+                menu.style.setProperty('left', `${Math.max(8, rect.left)}px`, 'important');
+                menu.style.setProperty('width', `${Math.max(180, rect.width)}px`, 'important');
+                menu.style.setProperty('right', 'auto', 'important');
+                menu.style.setProperty('top', openAbove ? 'auto' : `${rect.bottom + 6}px`, 'important');
+                menu.style.setProperty('bottom', openAbove ? `${window.innerHeight - rect.top + 6}px` : 'auto', 'important');
+                menu.style.setProperty('max-height', `${Math.max(150, Math.min(280, openAbove ? availableAbove : availableBelow))}px`, 'important');
+                menu.style.setProperty('z-index', '40000', 'important');
             }
         },
 
@@ -1291,14 +1305,9 @@
             button?.setAttribute('aria-expanded', 'false');
             if (menu) {
                 menu.hidden = true;
-                menu.style.position = '';
-                menu.style.left = '';
-                menu.style.width = '';
-                menu.style.right = '';
-                menu.style.top = '';
-                menu.style.bottom = '';
-                menu.style.maxHeight = '';
-                menu.style.zIndex = '';
+                ['position', 'left', 'width', 'right', 'top', 'bottom', 'max-height', 'z-index'].forEach(property => {
+                    menu.style.removeProperty(property);
+                });
             }
         },
 
