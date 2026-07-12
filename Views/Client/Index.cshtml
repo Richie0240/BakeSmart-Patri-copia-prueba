@@ -271,11 +271,13 @@
                 <select class="form-control" name="method" id="paymentGatewayMethod">
                     <option>Tarjeta</option>
                     <option>SINPE</option>
+                    <option>Transferencia</option>
+                    <option>Efectivo</option>
                 </select>
             </label>
             <label>
-                <span>Nombre del titular</span>
-                <input class="form-control" name="holder" placeholder="Nombre en la tarjeta o SINPE" required />
+                <span id="paymentReferenceLabel">Nombre del titular</span>
+                <input class="form-control" name="holder" id="paymentReferenceInput" placeholder="Nombre en la tarjeta o SINPE" required />
             </label>
             <label class="payment-card-field">
                 <span>Numero de tarjeta</span>
@@ -294,7 +296,7 @@
             <p class="payment-modal__note">Simulacion segura para desarrollo: no se guarda informacion sensible.</p>
             <button class="btn btn-primary quick-submit" type="submit" id="paymentConfirmBtn">
                 <i class="fas fa-lock"></i>
-                Pagar pedido
+                <span id="paymentConfirmText">Pagar pedido</span>
             </button>
         </form>
     </section>
@@ -321,6 +323,9 @@
             const paymentForm = document.getElementById('clientPaymentForm');
             const paymentMethod = document.getElementById('paymentGatewayMethod');
             const paymentConfirmBtn = document.getElementById('paymentConfirmBtn');
+            const paymentConfirmText = document.getElementById('paymentConfirmText');
+            const paymentReferenceLabel = document.getElementById('paymentReferenceLabel');
+            const paymentReferenceInput = document.getElementById('paymentReferenceInput');
             const addressModal = document.getElementById('quickAddressModal');
             const savedAddressChoice = document.getElementById('quickSavedAddressChoice');
             const savedAddressText = document.getElementById('quickSavedAddressText');
@@ -481,7 +486,20 @@
             }
 
             async function ensureAddressPicker() {
-                if (addressPicker || !window.BakeSmartMapPicker) return addressPicker;
+                if (addressPicker) return addressPicker;
+                for (let i = 0; i < 20 && (!window.L || !window.BakeSmartMapPicker); i++) {
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                }
+                if (!window.L || !window.BakeSmartMapPicker) {
+                    document.getElementById('quickMapPicker').innerHTML = `
+                        <div class="client-empty-state quick-map-fallback">
+                            <i class="fas fa-map-location-dot"></i>
+                            <strong>Mapa no disponible</strong>
+                            <span>Escriba la direccion y vuelva a intentarlo en unos segundos.</span>
+                        </div>
+                    `;
+                    return null;
+                }
                 const origin = BakeSmartStore.geo.origin();
                 addressPicker = await BakeSmartMapPicker.create('quickMapPicker', {
                     lat: currentProfile?.latitude || origin.lat,
@@ -508,6 +526,8 @@
                         lng: currentProfile?.longitude || BakeSmartStore.geo.origin().lng
                     });
                     requestAnimationFrame(() => addressPicker.map?.invalidateSize?.());
+                    setTimeout(() => addressPicker.map?.invalidateSize?.(), 250);
+                    setTimeout(() => addressPicker.map?.invalidateSize?.(), 900);
                 }
             }
 
@@ -553,6 +573,25 @@
                         <span>Cuando registres uno, aparecera aqui.</span>
                     </div>
                 `;
+                decorateMiniOrders(orders);
+            }
+
+            function decorateMiniOrders(orders) {
+                const rows = document.querySelectorAll('.client-order-row');
+                rows.forEach((row, index) => {
+                    const order = orders[index];
+                    if (!order || !String(order.paymentStatus || '').toLowerCase().includes('pendiente')) return;
+                    row.classList.add('client-order-row--payable');
+                    if (row.querySelector('[data-pay-deposit]')) return;
+                    const target = row.querySelector('.client-order-row__status');
+                    if (!target) return;
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'btn btn-outline btn-sm client-deposit-btn';
+                    button.dataset.payDeposit = order.id;
+                    button.innerHTML = '<i class="fas fa-money-bill-transfer"></i> Pagar abono';
+                    target.appendChild(button);
+                });
             }
 
             function updateSummary() {
@@ -575,15 +614,26 @@
                 document.getElementById('quickTotal').textContent = money(discountedSubtotal + tax);
             }
 
-            function shouldOpenGateway(method) {
+            function normalizeGatewayMethod(method) {
                 const value = String(method || '').toLowerCase();
-                return value.includes('linea') || value.includes('tarjeta') || value.includes('sinpe');
+                if (value.includes('sinpe')) return 'SINPE';
+                if (value.includes('transfer')) return 'Transferencia';
+                if (value.includes('efectivo')) return 'Efectivo';
+                return 'Tarjeta';
             }
 
-            function openPaymentGateway(orderId, total, method) {
-                pendingPayment = { orderId, total, method };
-                document.getElementById('paymentModalTotal').textContent = money(total);
-                paymentMethod.value = String(method || '').toLowerCase().includes('sinpe') ? 'SINPE' : 'Tarjeta';
+            function shouldOpenGateway(method) {
+                const value = String(method || '').toLowerCase();
+                return value.includes('linea') || value.includes('tarjeta') || value.includes('sinpe') || value.includes('transfer');
+            }
+
+            function openPaymentGateway(orderId, total, method, mode = 'full') {
+                const amount = mode === 'deposit' ? Math.max(1, Number(total || 0) * 0.3) : Number(total || 0);
+                pendingPayment = { orderId, total: amount, method, mode };
+                document.getElementById('paymentModalTotal').textContent = money(amount);
+                paymentMethod.value = normalizeGatewayMethod(method);
+                paymentConfirmText.textContent = mode === 'deposit' ? 'Pagar abono' : 'Pagar pedido';
+                paymentMethod.dispatchEvent(new Event('change', { bubbles: true }));
                 syncPaymentFields();
                 paymentModal.hidden = false;
                 paymentForm.holder.value = document.getElementById('quickCustomerName').value || '';
@@ -593,14 +643,39 @@
                 paymentModal.hidden = true;
                 pendingPayment = null;
                 paymentForm.reset();
+                paymentConfirmText.textContent = 'Pagar pedido';
                 syncPaymentFields();
             }
 
             function syncPaymentFields() {
-                const isSinpe = paymentMethod.value === 'SINPE';
+                const value = String(paymentMethod.value || '').toLowerCase();
+                const isCard = value.includes('tarjeta');
                 document.querySelectorAll('.payment-card-field').forEach(field => {
-                    field.hidden = isSinpe;
+                    field.hidden = !isCard;
+                    field.querySelectorAll('input').forEach(input => {
+                        input.disabled = !isCard;
+                        input.required = isCard;
+                        if (!isCard) input.value = '';
+                    });
                 });
+
+                if (value.includes('sinpe')) {
+                    paymentReferenceLabel.textContent = 'Referencia SINPE';
+                    paymentReferenceInput.placeholder = 'Telefono o comprobante SINPE';
+                    paymentReferenceInput.required = true;
+                } else if (value.includes('transfer')) {
+                    paymentReferenceLabel.textContent = 'Referencia de transferencia';
+                    paymentReferenceInput.placeholder = 'Banco o numero de comprobante';
+                    paymentReferenceInput.required = true;
+                } else if (value.includes('efectivo')) {
+                    paymentReferenceLabel.textContent = 'Recibido por';
+                    paymentReferenceInput.placeholder = 'Nombre de quien recibe el efectivo';
+                    paymentReferenceInput.required = false;
+                } else {
+                    paymentReferenceLabel.textContent = 'Titular de la tarjeta';
+                    paymentReferenceInput.placeholder = 'Nombre del titular';
+                    paymentReferenceInput.required = true;
+                }
             }
 
             function toggleQuickDelivery() {
@@ -619,6 +694,17 @@
             quantityInput.addEventListener('input', updateSummary);
             deliveryMethod.addEventListener('change', toggleQuickDelivery);
             paymentMethod.addEventListener('change', syncPaymentFields);
+            document.getElementById('clientMiniOrders').addEventListener('click', event => {
+                const button = event.target.closest('[data-pay-deposit]');
+                if (!button) return;
+                const order = BakeSmartStore.orders.byClient(userEmail)
+                    .find(row => Number(row.id) === Number(button.dataset.payDeposit));
+                if (!order) {
+                    app.toast.error('No se encontro el pedido para pagar el abono.');
+                    return;
+                }
+                openPaymentGateway(order.id, Number(order.total || 0), 'SINPE', 'deposit');
+            });
 
             document.querySelectorAll('[data-payment-close]').forEach(button => {
                 button.addEventListener('click', closePaymentGateway);

@@ -168,7 +168,10 @@
                 if (!pendingOrder) return;
                 form.customerName.value = pendingOrder.customerName || '';
                 form.customerEmail.value = pendingOrder.customerEmail || '';
-                if (pendingOrder.paymentMethod) form.paymentMethod.value = pendingOrder.paymentMethod;
+                if (pendingOrder.paymentMethod) {
+                    form.paymentMethod.value = pendingOrder.paymentMethod;
+                    form.paymentMethod.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             }
 
             function currentDiscountRate() {
@@ -280,6 +283,7 @@
                     : 'Tarjeta';
                 document.getElementById('posPaymentTotal').textContent = fmt(pendingTotals?.total || 0);
                 paymentForm.holder.value = form.customerName.value || '';
+                gatewayMethod.dispatchEvent(new Event('change', { bubbles: true }));
                 syncGatewayFields();
                 paymentModal.hidden = false;
             }

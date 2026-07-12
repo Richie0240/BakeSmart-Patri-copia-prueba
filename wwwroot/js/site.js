@@ -1191,6 +1191,8 @@
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape') this.closeAll();
             });
+            window.addEventListener('resize', () => this.closeAll(), { passive: true });
+            window.addEventListener('scroll', () => this.closeAll(), { passive: true, capture: true });
         },
 
         enhanceAll() {
@@ -1265,7 +1267,21 @@
             const menu = $('.bs-select__menu', wrapper);
             wrapper.classList.add('is-open');
             button?.setAttribute('aria-expanded', 'true');
-            if (menu) menu.hidden = false;
+            if (menu && button) {
+                const rect = button.getBoundingClientRect();
+                const availableBelow = window.innerHeight - rect.bottom - 10;
+                const availableAbove = rect.top - 10;
+                const openAbove = availableBelow < 180 && availableAbove > availableBelow;
+                menu.hidden = false;
+                menu.style.position = 'fixed';
+                menu.style.left = `${Math.max(8, rect.left)}px`;
+                menu.style.width = `${Math.max(180, rect.width)}px`;
+                menu.style.right = 'auto';
+                menu.style.top = openAbove ? 'auto' : `${rect.bottom + 6}px`;
+                menu.style.bottom = openAbove ? `${window.innerHeight - rect.top + 6}px` : 'auto';
+                menu.style.maxHeight = `${Math.max(150, Math.min(280, openAbove ? availableAbove : availableBelow))}px`;
+                menu.style.zIndex = '40000';
+            }
         },
 
         close(wrapper) {
@@ -1273,7 +1289,17 @@
             const menu = $('.bs-select__menu', wrapper);
             wrapper.classList.remove('is-open');
             button?.setAttribute('aria-expanded', 'false');
-            if (menu) menu.hidden = true;
+            if (menu) {
+                menu.hidden = true;
+                menu.style.position = '';
+                menu.style.left = '';
+                menu.style.width = '';
+                menu.style.right = '';
+                menu.style.top = '';
+                menu.style.bottom = '';
+                menu.style.maxHeight = '';
+                menu.style.zIndex = '';
+            }
         },
 
         closeAll() {

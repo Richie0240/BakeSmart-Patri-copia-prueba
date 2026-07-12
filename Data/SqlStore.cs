@@ -67,6 +67,17 @@ public sealed class SqlStore
 
     public async Task<IReadOnlyList<object>> OrdersAsync(string? customerEmail = null)
     {
+        static int StepForStatus(string? status)
+        {
+            var normalized = RemoveDiacritics(status ?? "").ToUpperInvariant();
+            if (normalized.Contains("ENTREGADO")) return 5;
+            if (normalized.Contains("CAMINO")) return 4;
+            if (normalized.Contains("LISTO")) return 3;
+            if (normalized.Contains("PRODUCCION")) return 2;
+            if (normalized.Contains("CONFIRMADO")) return 1;
+            return 0;
+        }
+
         const string sql = """
             SELECT
                 o.OrderId,
@@ -104,8 +115,14 @@ public sealed class SqlStore
             ORDER BY o.CreatedAt DESC;
             """;
 
-        return await QueryAsync(sql, reader => new
+        return await QueryAsync(sql, reader =>
         {
+            var orderStatus = reader.GetString("OrderStatus");
+            var storedStep = reader.GetInt32("TrackingStep");
+            var currentStep = Math.Max(storedStep, StepForStatus(orderStatus));
+
+            return new
+            {
             id = reader.GetInt32("OrderId"),
             cliente = reader.GetString("CustomerName"),
             customerEmail = reader.GetString("CustomerEmail"),
@@ -113,7 +130,7 @@ public sealed class SqlStore
             productId = reader.GetInt32("FirstProductId"),
             quantity = reader.GetDecimal("FirstQuantity"),
             unitPrice = reader.GetDecimal("FirstUnitPrice"),
-            estado = reader.GetString("OrderStatus"),
+            estado = orderStatus,
             entrega = reader.GetDateTime("DeliveryDate").ToString("yyyy-MM-dd"),
             total = reader.GetDecimal("Total"),
             canal = reader.GetString("Channel"),
@@ -128,9 +145,10 @@ public sealed class SqlStore
                 currentLng = reader.GetDecimal("CurrentLongitude"),
                 destinationLat = reader.GetDecimal("DestinationLatitude"),
                 destinationLng = reader.GetDecimal("DestinationLongitude"),
-                currentStep = reader.GetInt32("TrackingStep"),
+                currentStep,
                 steps = new[] { "Pendiente pago", "Confirmado", "En produccion", "Listo", "En camino", "Entregado" }
             }
+            };
         }, new SqlParameter("@CustomerEmail", string.IsNullOrWhiteSpace(customerEmail) ? DBNull.Value : customerEmail.Trim().ToLowerInvariant()));
     }
 
