@@ -7,13 +7,29 @@
   const refreshAllTtlMs = 15000;
 
   async function request(url, options = {}) {
-    const response = await fetch(url, {
+    const method = String(options.method || "GET").toUpperCase();
+    const shouldTimeout = method === "GET";
+    const controller = shouldTimeout ? new AbortController() : null;
+    const timeout = controller ? window.setTimeout(() => controller.abort(), 8000) : null;
+
+    let response;
+    try {
+      response = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
         ...(options.headers || {})
       },
+      signal: controller?.signal,
       ...options
-    });
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error("La consulta tardo demasiado. Mostrando datos disponibles.");
+      }
+      throw error;
+    } finally {
+      if (timeout) window.clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const text = await response.text();
