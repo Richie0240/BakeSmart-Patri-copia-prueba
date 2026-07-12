@@ -123,6 +123,51 @@
             longitude >= -180 && longitude <= 180;
     }
 
+    function normalizeStatus(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+    }
+
+    function canShowLiveRoute(order) {
+        const status = normalizeStatus(order.status);
+        return status.includes('camino') || status.includes('entregado');
+    }
+
+    function routeWaitingMessage(order) {
+        const status = normalizeStatus(order.status);
+        if (status.includes('produccion')) {
+            return {
+                title: 'Pedido en produccion',
+                text: 'La ruta se activara cuando el equipo marque el pedido como En camino.'
+            };
+        }
+        if (status.includes('listo')) {
+            return {
+                title: 'Pedido listo para despacho',
+                text: 'El mapa mostrara la ruta real apenas se confirme la salida del pedido.'
+            };
+        }
+        if (status.includes('confirmado')) {
+            return {
+                title: 'Pedido confirmado',
+                text: 'Todavia no hay ruta activa. Primero debe pasar a produccion y luego a envio.'
+            };
+        }
+        if (status.includes('pendiente')) {
+            return {
+                title: 'Pedido pendiente',
+                text: 'Cuando el pedido avance, aqui veras el estado y la ruta de entrega.'
+            };
+        }
+        return {
+            title: 'Ruta aun no iniciada',
+            text: 'El seguimiento en mapa aparece cuando el pedido sale a entrega.'
+        };
+    }
+
     function sanitizeLocation(location, fallback) {
         const source = location || {};
         const safeFallback = fallback || defaultOrigin;
@@ -205,6 +250,7 @@
     function clearVisuals() {
         markers.forEach(m => m.remove());
         layers.forEach(l => l.remove());
+        document.querySelectorAll('.track-map-notice').forEach(node => node.remove());
         markers = [];
         layers = [];
 
@@ -374,6 +420,41 @@
         `;
     }
 
+    function renderWaitingMap(order, destination, routeType, mapInstance, icons) {
+        const message = routeWaitingMessage(order);
+        document.getElementById('trackMeta').textContent = `${message.title}. ${message.text}`;
+
+        if (!mapInstance) {
+            document.getElementById('deliveryMap').innerHTML = `
+                <div class="track-empty-state">
+                    <i class="fas fa-clock"></i>
+                    <strong>${message.title}</strong>
+                    <span>${message.text}</span>
+                </div>
+            `;
+            return;
+        }
+
+        const startLatLng = [origin.lat, origin.lng];
+        const originMarker = L.marker(startLatLng, { icon: icons.origin })
+            .addTo(mapInstance)
+            .bindPopup(`${origin.name}<br>${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`);
+        markers.push(originMarker);
+        mapInstance.setView(startLatLng, 13);
+
+        const notice = document.createElement('div');
+        notice.className = 'track-map-notice';
+        notice.innerHTML = `
+            <span><i class="fas fa-bell"></i></span>
+            <div>
+                <strong>${message.title}</strong>
+                <p>${message.text}</p>
+            </div>
+        `;
+        document.getElementById('deliveryMap').appendChild(notice);
+        requestAnimationFrame(() => mapInstance.invalidateSize(true));
+    }
+
     function renderOrder(orderId) {
         const orders = getOrders();
         const order = orders.find(x => Number(x.id) === Number(orderId)) || orders[0];
@@ -383,7 +464,8 @@
 
         const destination = activePreset(order);
         const isInternational = destination.country !== 'Costa Rica';
-        const routeType = isInternational ? 'Trayectoria aerea' : 'Trayecto local';
+        const hasLiveRoute = canShowLiveRoute(order);
+        const routeType = hasLiveRoute ? (isInternational ? 'Trayectoria aerea' : 'Trayecto local') : 'Ruta pendiente';
         document.getElementById('trackOrderId').textContent = `#${order.id}`;
         document.getElementById('trackStatus').textContent = order.status;
         document.getElementById('trackRouteType').textContent = routeType;
@@ -403,6 +485,11 @@
         }
 
         const icons = getIcons();
+
+        if (!hasLiveRoute) {
+            renderWaitingMap(order, destination, routeType, mapInstance, icons);
+            return;
+        }
 
         const flightPath = curveBetween(startLatLng, destinationLatLng, true, -1);
         const localRoute = buildLocalRoute(startLatLng, destinationLatLng, order.tracking?.currentStep || 0);

@@ -1099,8 +1099,8 @@
             const loader = $('#pageLoader');
             if (!loader) return;
             const dismiss = () => loader.classList.add('is-hidden');
-            window.addEventListener('load', () => setTimeout(dismiss, 350), { once: true });
-            setTimeout(dismiss, 1400);
+            window.addEventListener('load', () => setTimeout(dismiss, 100), { once: true });
+            setTimeout(dismiss, 550);
         }
     };
 
@@ -1200,7 +1200,7 @@
             });
             this._observer.observe(document.body, { childList: true, subtree: true });
             document.addEventListener('click', event => {
-                if (!event.target.closest('.bs-select')) this.closeAll();
+                if (!event.target.closest('.bs-select') && !event.target.closest('.bs-select__menu')) this.closeAll();
             });
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape') this.closeAll();
@@ -1237,7 +1237,9 @@
             menu.setAttribute('role', 'listbox');
 
             select.parentNode.insertBefore(wrapper, select);
-            wrapper.append(select, button, menu);
+            wrapper.append(select, button);
+            document.body.appendChild(menu);
+            wrapper._bsSelectMenu = menu;
             select.classList.add('bs-select__native');
 
             const render = () => {
@@ -1278,29 +1280,41 @@
 
         open(wrapper) {
             const button = $('.bs-select__button', wrapper);
-            const menu = $('.bs-select__menu', wrapper);
+            const menu = wrapper._bsSelectMenu || $('.bs-select__menu', wrapper);
             wrapper.classList.add('is-open');
             button?.setAttribute('aria-expanded', 'true');
             if (menu && button) {
                 const rect = button.getBoundingClientRect();
-                const availableBelow = window.innerHeight - rect.bottom - 10;
-                const availableAbove = rect.top - 10;
-                const openAbove = availableBelow < 180 && availableAbove > availableBelow;
+                const margin = 10;
+                const availableBelow = window.innerHeight - rect.bottom - margin;
+                const availableAbove = rect.top - margin;
+                const maxAvailable = Math.max(availableBelow, availableAbove, 160);
+                const maxHeight = Math.min(320, Math.max(160, maxAvailable));
+                const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                const menuWidth = Math.min(Math.max(180, rect.width), viewportWidth - (margin * 2));
+                const left = Math.min(Math.max(margin, rect.left), viewportWidth - menuWidth - margin);
+                const openAbove = availableBelow < 190 && availableAbove > availableBelow;
+
                 menu.hidden = false;
                 menu.style.setProperty('position', 'fixed', 'important');
-                menu.style.setProperty('left', `${Math.max(8, rect.left)}px`, 'important');
-                menu.style.setProperty('width', `${Math.max(180, rect.width)}px`, 'important');
+                menu.style.setProperty('left', `${left}px`, 'important');
+                menu.style.setProperty('width', `${menuWidth}px`, 'important');
                 menu.style.setProperty('right', 'auto', 'important');
-                menu.style.setProperty('top', openAbove ? 'auto' : `${rect.bottom + 6}px`, 'important');
-                menu.style.setProperty('bottom', openAbove ? `${window.innerHeight - rect.top + 6}px` : 'auto', 'important');
-                menu.style.setProperty('max-height', `${Math.max(150, Math.min(280, openAbove ? availableAbove : availableBelow))}px`, 'important');
+                menu.style.setProperty('bottom', 'auto', 'important');
+                menu.style.setProperty('max-height', `${maxHeight}px`, 'important');
                 menu.style.setProperty('z-index', '40000', 'important');
+
+                const measuredHeight = Math.min(menu.scrollHeight || maxHeight, maxHeight);
+                const top = openAbove
+                    ? Math.max(margin, rect.top - measuredHeight - 6)
+                    : Math.min(rect.bottom + 6, window.innerHeight - measuredHeight - margin);
+                menu.style.setProperty('top', `${top}px`, 'important');
             }
         },
 
         close(wrapper) {
             const button = $('.bs-select__button', wrapper);
-            const menu = $('.bs-select__menu', wrapper);
+            const menu = wrapper._bsSelectMenu || $('.bs-select__menu', wrapper);
             wrapper.classList.remove('is-open');
             button?.setAttribute('aria-expanded', 'false');
             if (menu) {
