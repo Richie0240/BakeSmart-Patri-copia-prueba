@@ -69,52 +69,56 @@
 
     <div class="pos-layout">
         <aside class="card pos-side-card">
-            <div class="pos-panel-header">
-                <div>
-                    <div class="pos-panel-eyebrow">Caja</div>
-                    <h3 class="pos-panel-title">Control de caja</h3>
+            <section class="pos-admin-block pos-admin-block--cash">
+                <div class="pos-panel-header">
+                    <div>
+                        <div class="pos-panel-eyebrow">Caja</div>
+                        <h3 class="pos-panel-title">Control de caja</h3>
+                    </div>
+                    <span class="status-chip pos-box-chip" id="posBoxChip">Sin turno</span>
                 </div>
-                <span class="status-chip pos-box-chip" id="posBoxChip">Sin turno</span>
-            </div>
 
-            <div id="posSessionPanel"></div>
+                <div id="posSessionPanel"></div>
+            </section>
 
-            <div class="pos-sessions-board" id="posSessionsBoard">
+            <section class="pos-admin-block pos-admin-block--sessions">
+                <div class="pos-sessions-board" id="posSessionsBoard">
+                    <div class="pos-panel-header pos-panel-header--compact">
+                        <div>
+                            <div class="pos-panel-eyebrow">Supervision</div>
+                            <h4 class="pos-panel-title-sm">Estado de cajas</h4>
+                        </div>
+                    </div>
+                    <div id="posSessionsList" class="pos-sessions-list"></div>
+                </div>
+            </section>
+
+            <section class="pos-admin-block pos-admin-block--payments">
                 <div class="pos-panel-header pos-panel-header--compact">
                     <div>
-                        <div class="pos-panel-eyebrow">Supervision</div>
-                        <h4 class="pos-panel-title-sm">Estado de cajas</h4>
+                        <div class="pos-panel-eyebrow">Cobro</div>
+                        <h4 class="pos-panel-title-sm">Formas de pago</h4>
                     </div>
                 </div>
-                <div id="posSessionsList" class="pos-sessions-list"></div>
-            </div>
 
-            <div class="hr"></div>
+                <div id="paymentMethodsPanel" class="payment-methods-panel"></div>
 
-            <div class="pos-panel-header pos-panel-header--compact">
-                <div>
-                    <div class="pos-panel-eyebrow">Cobro</div>
-                    <h4 class="pos-panel-title-sm">Formas de pago</h4>
-                </div>
-            </div>
+                <form id="paymentMethodForm" class="pos-payment-config-form" hidden="@(!canManagePayments)">
+                    <input class="form-control" name="name" placeholder="Forma de pago" required />
+                    <input class="form-control" name="commissionRate" type="number" min="0" step="0.01" placeholder="Comisión" required />
+                    <input class="form-control" name="account" placeholder="Cuenta contable" required />
+                    <button class="btn btn-outline btn-sm" type="submit">Guardar forma</button>
+                </form>
+            </section>
 
-            <div id="paymentMethodsPanel" class="payment-methods-panel"></div>
-
-            <form id="paymentMethodForm" class="pos-payment-config-form" hidden="@(!canManagePayments)">
-                <input class="form-control" name="name" placeholder="Forma de pago" required />
-                <input class="form-control" name="commissionRate" type="number" min="0" step="0.01" placeholder="Comisión" required />
-                <input class="form-control" name="account" placeholder="Cuenta contable" required />
-                <button class="btn btn-outline btn-sm" type="submit">Guardar forma</button>
-            </form>
-
-            <div class="hr" hidden="@(!canManageCreditNotes)"></div>
-
-            <form id="creditNoteForm" class="pos-payment-config-form" hidden="@(!canManageCreditNotes)">
-                <input class="form-control" name="saleId" type="number" min="1" placeholder="ID de venta o pedido" required />
-                <input class="form-control" name="reason" placeholder="Motivo de nota de crédito" required />
-                <button class="btn btn-ghost btn-sm" type="submit">Registrar nota</button>
-            </form>
-            <div class="pos-recent-sales" id="posRecentSales" hidden="@(!canManageCreditNotes)"></div>
+            <section class="pos-admin-block pos-admin-block--credit" hidden="@(!canManageCreditNotes)">
+                <form id="creditNoteForm" class="pos-payment-config-form">
+                    <input class="form-control" name="saleId" type="number" min="1" placeholder="ID de venta o pedido" required />
+                    <input class="form-control" name="reason" placeholder="Motivo de nota de crédito" required />
+                    <button class="btn btn-ghost btn-sm" type="submit">Registrar nota</button>
+                </form>
+                <div class="pos-recent-sales" id="posRecentSales"></div>
+            </section>
         </aside>
 
         <section class="card pos-main-card">

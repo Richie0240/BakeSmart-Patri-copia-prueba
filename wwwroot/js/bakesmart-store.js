@@ -62,26 +62,49 @@
     return activeSessionCache;
   }
 
+  const loaders = {
+    orders: () => load("orders", "/api/orders"),
+    inventory: () => load("inventory", "/api/inventory"),
+    inventoryMovements: () => load("inventoryMovements", "/api/inventory/movements"),
+    customers: () => load("customers", "/api/customers"),
+    promotions: () => load("promotions", "/api/promotions"),
+    users: () => load("users", "/api/users"),
+    roles: () => load("roles", "/api/roles"),
+    posConfig: () => load("posConfig", "/api/pos/config", {}),
+    accounting: () => load("accounting", "/api/accounting", {}),
+    logs: () => load("logs", "/api/logs")
+  };
+
+  function refreshKeysForCurrentPage() {
+    const page = String(document.body?.dataset?.page || location.pathname || "").toLowerCase();
+    const keys = new Set(["orders", "inventory", "posConfig"]);
+
+    if (page.startsWith("/pos")) keys.add("customers");
+    if (page.startsWith("/client")) keys.add("customers");
+    if (page.startsWith("/orders")) keys.add("customers");
+    if (page.startsWith("/marketing")) ["customers", "promotions"].forEach(key => keys.add(key));
+    if (page.startsWith("/inventory")) keys.add("inventoryMovements");
+    if (page.startsWith("/users")) ["users", "roles"].forEach(key => keys.add(key));
+    if (page.startsWith("/roles")) keys.add("roles");
+    if (page.startsWith("/accounting")) keys.add("accounting");
+    if (page.startsWith("/audit")) keys.add("logs");
+    if (page.startsWith("/reports")) ["customers", "inventoryMovements", "accounting"].forEach(key => keys.add(key));
+    if (page.startsWith("/admin")) ["customers", "promotions", "users", "roles", "accounting"].forEach(key => keys.add(key));
+
+    return [...keys];
+  }
+
   function refreshAll(options = {}) {
     const force = options === true || Boolean(options.force);
     const now = Date.now();
+    const keys = Array.isArray(options.keys) ? options.keys : refreshKeysForCurrentPage();
     if (!force && refreshAllPromise) return refreshAllPromise;
-    if (!force && cache.size && now - refreshAllCompletedAt < refreshAllTtlMs) {
+    if (!force && keys.every(key => cache.has(key)) && now - refreshAllCompletedAt < refreshAllTtlMs) {
       return Promise.resolve([]);
     }
 
-    refreshAllPromise = Promise.allSettled([
-      load("orders", "/api/orders"),
-      load("inventory", "/api/inventory"),
-      load("inventoryMovements", "/api/inventory/movements"),
-      load("customers", "/api/customers"),
-      load("promotions", "/api/promotions"),
-      load("users", "/api/users"),
-      load("roles", "/api/roles"),
-      load("posConfig", "/api/pos/config", {}),
-      load("accounting", "/api/accounting", {}),
-      load("logs", "/api/logs")
-    ]).finally(() => {
+    const missingOrForcedKeys = force ? keys : keys.filter(key => !cache.has(key) || now - refreshAllCompletedAt >= refreshAllTtlMs);
+    refreshAllPromise = Promise.allSettled(missingOrForcedKeys.map(key => loaders[key]?.()).filter(Boolean)).finally(() => {
       refreshAllCompletedAt = Date.now();
       refreshAllPromise = null;
     });
