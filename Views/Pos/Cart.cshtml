@@ -248,6 +248,7 @@
                 const show = shouldShowCardFields(gatewayMethod.value);
                 document.querySelectorAll('.pos-card-field').forEach(field => {
                     field.hidden = !show;
+                    field.style.display = show ? '' : 'none';
                     field.querySelectorAll('input').forEach(input => {
                         input.disabled = !show;
                         input.required = show;
@@ -276,6 +277,9 @@
             }
 
             function openPaymentModal() {
+                if (paymentModal.parentElement !== document.body) {
+                    document.body.appendChild(paymentModal);
+                }
                 const method = form.paymentMethod.value || 'Tarjeta';
                 gatewayMethod.value = String(method).toLowerCase().includes('sinpe') ? 'SINPE'
                     : String(method).toLowerCase().includes('efectivo') ? 'Efectivo'

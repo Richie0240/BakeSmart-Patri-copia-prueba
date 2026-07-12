@@ -630,6 +630,9 @@
             function openPaymentGateway(orderId, total, method, mode = 'full') {
                 const amount = mode === 'deposit' ? Math.max(1, Number(total || 0) * 0.3) : Number(total || 0);
                 pendingPayment = { orderId, total: amount, method, mode };
+                if (paymentModal.parentElement !== document.body) {
+                    document.body.appendChild(paymentModal);
+                }
                 document.getElementById('paymentModalTotal').textContent = money(amount);
                 paymentMethod.value = normalizeGatewayMethod(method);
                 paymentConfirmText.textContent = mode === 'deposit' ? 'Pagar abono' : 'Pagar pedido';
@@ -652,6 +655,7 @@
                 const isCard = value.includes('tarjeta');
                 document.querySelectorAll('.payment-card-field').forEach(field => {
                     field.hidden = !isCard;
+                    field.style.display = isCard ? '' : 'none';
                     field.querySelectorAll('input').forEach(input => {
                         input.disabled = !isCard;
                         input.required = isCard;

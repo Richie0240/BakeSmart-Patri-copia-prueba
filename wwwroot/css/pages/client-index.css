@@ -522,7 +522,7 @@
 .payment-modal {
     position: fixed;
     inset: 0;
-    z-index: 9000;
+    z-index: 2147483000 !important;
     display: grid;
     place-items: center;
     padding: 1rem;
@@ -537,7 +537,7 @@
 
 .payment-modal__dialog {
     position: relative;
-    z-index: 1;
+    z-index: 2147483001 !important;
     display: grid;
     gap: 1rem;
     width: min(460px, 100%);
@@ -548,6 +548,12 @@
     border-radius: 8px;
     background: var(--bg-card);
     box-shadow: var(--shadow-lg);
+}
+
+.payment-card-field[hidden],
+.payment-form__grid.payment-card-field[hidden],
+.payment-form label[hidden] {
+    display: none !important;
 }
 
 .quick-address-modal__dialog {

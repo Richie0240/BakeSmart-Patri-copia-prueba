@@ -94,9 +94,10 @@ body.pos-cart-is-open .pos-cart-fab { opacity:0; pointer-events:none; }
 .pos-cart-totals { display:grid; gap:.45rem; padding:.9rem; border:1px solid #eadff0; border-radius:10px; background:linear-gradient(120deg,#f8f2ff,#fff7fb); }
 .pos-cart-totals .total-final strong { color:#6f3ddd; font-size:1.25rem; }
 .pos-payment-modal[hidden]{display:none}
-.pos-payment-modal{position:fixed;inset:0;z-index:9200;display:grid;place-items:center;padding:1rem}
+.pos-payment-modal{position:fixed;inset:0;z-index:2147483000!important;display:grid;place-items:center;padding:1rem}
 .pos-payment-modal__backdrop{position:absolute;inset:0;background:rgba(17,24,39,.48);backdrop-filter:blur(6px)}
-.pos-payment-modal__dialog{position:relative;z-index:1;display:grid;gap:1rem;width:min(460px,100%);max-height:min(86vh,720px);overflow:auto;padding:1rem;border:1px solid #dfd5e8;border-radius:10px;background:#fff;box-shadow:0 24px 70px rgba(39,23,51,.25)}
+.pos-payment-modal__dialog{position:relative;z-index:2147483001!important;display:grid;gap:1rem;width:min(460px,100%);max-height:min(86vh,720px);overflow:auto;padding:1rem;border:1px solid #dfd5e8;border-radius:10px;background:#fff;box-shadow:0 24px 70px rgba(39,23,51,.25)}
+.pos-card-field[hidden],.pos-payment-form__grid.pos-card-field[hidden],.pos-payment-form label[hidden]{display:none!important}
 .pos-payment-modal__close{position:absolute;top:.75rem;right:.75rem;display:grid;place-items:center;width:36px;height:36px;border:1px solid #e9e2ee;border-radius:8px;background:#fff;color:#25293b;cursor:pointer}
 .pos-payment-modal__header{display:flex;gap:.8rem;align-items:center;padding-right:2.5rem}
 .pos-payment-modal__header>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #dfd5e8;border-radius:8px;background:#f3edfa;color:#6f3ddd}
