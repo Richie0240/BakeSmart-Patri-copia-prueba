@@ -23,6 +23,9 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewData["Title"] = "Punto de venta";
+    var canManagePayments = User.IsInRole("Admin") || User.IsInRole("Staff");
+    var canViewCashSessions = User.IsInRole("Admin") || User.IsInRole("Staff") || User.IsInRole("Supervisor");
+    var canManageCreditNotes = User.IsInRole("Admin") || User.IsInRole("Staff");
 }
 
 <div class="page-shell pos-page">
@@ -76,7 +79,7 @@
 
             <div id="posSessionPanel"></div>
 
-            <div class="pos-sessions-board">
+            <div class="pos-sessions-board" id="posSessionsBoard">
                 <div class="pos-panel-header pos-panel-header--compact">
                     <div>
                         <div class="pos-panel-eyebrow">Supervision</div>
@@ -276,6 +279,11 @@
             const cart = [];
             const fmt = app.utils.formatCurrency;
             let recentSales = [];
+            const permissions = {
+                canManagePayments: @canManagePayments.ToString().ToLowerInvariant(),
+                canViewCashSessions: @canViewCashSessions.ToString().ToLowerInvariant(),
+                canManageCreditNotes: @canManageCreditNotes.ToString().ToLowerInvariant()
+            };
 
             const getConfig = () => store.pos.config();
             const getActiveSession = () => store.pos.activeSession();
@@ -307,6 +315,10 @@
             function renderSessionPanel() {
                 const session = getActiveSession();
                 const container = document.getElementById('posSessionPanel');
+                document.getElementById('posSessionsBoard')?.toggleAttribute('hidden', !permissions.canViewCashSessions);
+                document.getElementById('paymentMethodForm')?.toggleAttribute('hidden', !permissions.canManagePayments);
+                document.getElementById('creditNoteForm')?.toggleAttribute('hidden', !permissions.canManageCreditNotes);
+                document.getElementById('posRecentSales')?.toggleAttribute('hidden', !permissions.canManageCreditNotes);
 
                 if (session) {
                     container.innerHTML = `
@@ -336,8 +348,8 @@
                 }
 
                 renderPaymentMethods();
-                renderSessionsList();
-                renderRecentSales();
+                if (permissions.canViewCashSessions) renderSessionsList();
+                if (permissions.canManageCreditNotes) renderRecentSales();
             }
 
             function renderSessionsList() {
@@ -393,9 +405,9 @@
                                     <div class="payment-method-name">${method.name}</div>
                                     <div class="payment-method-account">Cuenta: ${method.account} · Comisión: ${Number(method.commissionRate || 0).toFixed(2)}</div>
                                 </div>
-                            <button class="badge ${method.active ? 'badge-success' : 'badge-warning'}" type="button" onclick="togglePaymentMethod(${method.id})">
-                                ${method.active ? 'Activo' : 'Inactivo'}
-                            </button>
+                            ${permissions.canManagePayments
+                                ? `<button class="badge ${method.active ? 'badge-success' : 'badge-warning'}" type="button" onclick="togglePaymentMethod(${method.id})">${method.active ? 'Activo' : 'Inactivo'}</button>`
+                                : `<span class="badge ${method.active ? 'badge-success' : 'badge-warning'}">${method.active ? 'Activo' : 'Inactivo'}</span>`}
                         </div>
                     </div>
                 `).join('');
@@ -709,6 +721,10 @@
             };
 
             window.togglePaymentMethod = async (id) => {
+                if (!permissions.canManagePayments) {
+                    app.toast.warning('Solo Admin o Staff puede modificar formas de pago.');
+                    return;
+                }
                 try {
                     await store.pos.togglePaymentMethod(id);
                     app.toast.success('Forma de pago actualizada.');
@@ -720,6 +736,7 @@
 
             document.getElementById('paymentMethodForm').addEventListener('submit', async (event) => {
                 event.preventDefault();
+                if (!permissions.canManagePayments) return;
 
                 try {
                     await store.pos.savePaymentMethod(Object.fromEntries(new FormData(event.target).entries()));
@@ -733,6 +750,7 @@
 
             document.getElementById('creditNoteForm').addEventListener('submit', async (event) => {
                 event.preventDefault();
+                if (!permissions.canManageCreditNotes) return;
 
                 try {
                     await store.pos.creditNote(Object.fromEntries(new FormData(event.target).entries()));
@@ -859,7 +877,9 @@
 
             // Cargar sesiones de caja primero, luego refresh general
             store.refreshPos().then(() => store.refresh().then(async () => {
-                try { recentSales = await store.pos.recentSales(); } catch { recentSales = []; }
+                if (permissions.canManageCreditNotes) {
+                    try { recentSales = await store.pos.recentSales(); } catch { recentSales = []; }
+                }
                 renderAll();
             }).catch(error => app.toast.error(error.message)));
         })();

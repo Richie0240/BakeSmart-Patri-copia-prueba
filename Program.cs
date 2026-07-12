@@ -45,11 +45,12 @@ var dataProtection = builder.Services
 
 var dataProtectionConnectionString = builder.Configuration.GetConnectionString("BakeSmartDb");
 var disableSqlDataProtection = builder.Configuration.GetValue<bool>("Features:DisableSqlDataProtection");
-var useSqlDataProtection =
-    builder.Configuration.GetValue<bool>("Features:UseSqlDataProtection") ||
-    (!disableSqlDataProtection &&
-     !builder.Environment.IsDevelopment() &&
-     builder.Configuration.GetValue<bool>("Features:UseSqlDatabase"));
+var explicitSqlDataProtection = builder.Configuration.GetSection("Features:UseSqlDataProtection").Exists();
+var useSqlDataProtection = !builder.Environment.IsDevelopment() &&
+    (explicitSqlDataProtection
+        ? builder.Configuration.GetValue<bool>("Features:UseSqlDataProtection")
+        : (!disableSqlDataProtection &&
+           builder.Configuration.GetValue<bool>("Features:UseSqlDatabase")));
 
 if (useSqlDataProtection &&
     !string.IsNullOrWhiteSpace(dataProtectionConnectionString))
@@ -61,7 +62,10 @@ if (useSqlDataProtection &&
 }
 else
 {
-    var dataProtectionPath = Path.Combine(builder.Environment.ContentRootPath, ".data-protection");
+    var dataProtectionRoot = !builder.Environment.IsDevelopment()
+        ? Path.GetTempPath()
+        : builder.Environment.ContentRootPath;
+    var dataProtectionPath = Path.Combine(dataProtectionRoot, ".bakesmart-data-protection");
     Directory.CreateDirectory(dataProtectionPath);
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
 }

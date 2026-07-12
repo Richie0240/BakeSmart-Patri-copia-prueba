@@ -98,8 +98,8 @@
                 </select>
             </label>
             <label>
-                <span>Referencia o titular</span>
-                <input class="form-control" name="holder" placeholder="Nombre, SINPE o referencia" required />
+                <span id="posGatewayReferenceLabel">Referencia o titular</span>
+                <input class="form-control" name="holder" id="posGatewayReference" placeholder="Nombre, SINPE o referencia" required />
             </label>
             <label class="pos-card-field">
                 <span>Numero de tarjeta</span>
@@ -132,6 +132,8 @@
             const paymentModal = document.getElementById('posPaymentModal');
             const paymentForm = document.getElementById('posPaymentForm');
             const gatewayMethod = document.getElementById('posGatewayMethod');
+            const gatewayReferenceLabel = document.getElementById('posGatewayReferenceLabel');
+            const gatewayReference = document.getElementById('posGatewayReference');
             const paymentConfirmBtn = document.getElementById('posPaymentConfirmBtn');
             let pendingOrder = null;
             let pendingTotals = null;
@@ -241,7 +243,33 @@
 
             function syncGatewayFields() {
                 const show = shouldShowCardFields(gatewayMethod.value);
-                document.querySelectorAll('.pos-card-field').forEach(field => field.hidden = !show);
+                document.querySelectorAll('.pos-card-field').forEach(field => {
+                    field.hidden = !show;
+                    field.querySelectorAll('input').forEach(input => {
+                        input.disabled = !show;
+                        input.required = show;
+                        if (!show) input.value = '';
+                    });
+                });
+
+                const method = String(gatewayMethod.value || '').toLowerCase();
+                if (method.includes('efectivo')) {
+                    gatewayReferenceLabel.textContent = 'Recibido por';
+                    gatewayReference.placeholder = 'Nombre de quien recibe el efectivo';
+                    gatewayReference.required = false;
+                } else if (method.includes('sinpe')) {
+                    gatewayReferenceLabel.textContent = 'Referencia SINPE';
+                    gatewayReference.placeholder = 'Telefono o comprobante SINPE';
+                    gatewayReference.required = true;
+                } else if (method.includes('transfer')) {
+                    gatewayReferenceLabel.textContent = 'Referencia de transferencia';
+                    gatewayReference.placeholder = 'Numero de comprobante o banco';
+                    gatewayReference.required = true;
+                } else {
+                    gatewayReferenceLabel.textContent = 'Titular de la tarjeta';
+                    gatewayReference.placeholder = 'Nombre del titular';
+                    gatewayReference.required = true;
+                }
             }
 
             function openPaymentModal() {

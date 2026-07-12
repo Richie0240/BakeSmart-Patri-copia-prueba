@@ -2566,16 +2566,20 @@ public sealed class SqlStore
         await AddAuditLogAsync("CIERRE_CAJA", $"Sesion de caja #{sessionId} cerrada con â‚¡{closingAmount:N0}", userEmail);
     }
 
-    public async Task<IReadOnlyList<object>> CashSessionsAsync()
+    public async Task<IReadOnlyList<object>> CashSessionsAsync(string? userEmail = null, bool includeAll = false)
     {
         const string sql = """
             SELECT cs.CashSessionId, cs.OpenedAt, cs.ClosedAt, cs.OpeningAmount, cs.ClosingAmount, cs.Status,
                    COALESCE(CONCAT(u.FirstName, N' ', u.LastName), N'Sistema') AS UserName,
+                   COALESCE(u.Email, N'') AS UserEmail,
                    COALESCE(SUM(csp.Amount), 0) AS TotalSales
             FROM dbo.SesionesCaja cs
             LEFT JOIN dbo.Usuarios u ON u.UserId = cs.OpenedByUserId
             LEFT JOIN dbo.PagosSesionCaja csp ON csp.CashSessionId = cs.CashSessionId
-            GROUP BY cs.CashSessionId, cs.OpenedAt, cs.ClosedAt, cs.OpeningAmount, cs.ClosingAmount, cs.Status, u.FirstName, u.LastName
+            WHERE @IncludeAll = 1
+               OR @UserEmail IS NULL
+               OR LOWER(u.Email) = LOWER(@UserEmail)
+            GROUP BY cs.CashSessionId, cs.OpenedAt, cs.ClosedAt, cs.OpeningAmount, cs.ClosingAmount, cs.Status, u.FirstName, u.LastName, u.Email
             ORDER BY cs.OpenedAt DESC;
             """;
 
@@ -2588,8 +2592,11 @@ public sealed class SqlStore
             closingAmount = reader.IsDBNull(reader.GetOrdinal("ClosingAmount")) ? (decimal?)null : reader.GetDecimal("ClosingAmount"),
             totalSales = reader.GetDecimal("TotalSales"),
             userName = reader.GetString("UserName"),
+            userEmail = reader.GetString("UserEmail"),
             status = reader.GetString("Status")
-        });
+        },
+        new SqlParameter("@UserEmail", (object?)userEmail ?? DBNull.Value),
+        new SqlParameter("@IncludeAll", includeAll));
     }
 
     public async Task<IReadOnlyList<object>> RecentPosSalesAsync()
@@ -2731,7 +2738,17 @@ public sealed class SqlStore
             DECLARE @PaymentMethodId int = (SELECT PaymentMethodId FROM dbo.MetodosPago WHERE Name = @PaymentMethodName);
             IF @PaymentMethodId IS NULL SELECT TOP 1 @PaymentMethodId = PaymentMethodId FROM dbo.MetodosPago WHERE Name = N'Efectivo';
 
-            DECLARE @ActiveSessionId int = (SELECT TOP 1 CashSessionId FROM dbo.SesionesCaja WHERE Status = N'Abierta' ORDER BY CashSessionId DESC);
+            DECLARE @CurrentUserId int;
+            IF @UserEmail IS NOT NULL
+                SELECT @CurrentUserId = UserId FROM dbo.Usuarios WHERE LOWER(Email) = LOWER(@UserEmail);
+
+            DECLARE @ActiveSessionId int = (
+                SELECT TOP 1 CashSessionId
+                FROM dbo.SesionesCaja
+                WHERE Status = N'Abierta'
+                  AND (@CurrentUserId IS NULL OR OpenedByUserId = @CurrentUserId)
+                ORDER BY CashSessionId DESC
+            );
             IF @ActiveSessionId IS NULL
                 THROW 50042, 'Debe abrir caja antes de confirmar ventas.', 1;
 
@@ -2843,6 +2860,7 @@ public sealed class SqlStore
             new SqlParameter("@Tax", input.Tax),
             new SqlParameter("@Total", input.Total),
             new SqlParameter("@Notes", (object?)input.Notes?.Trim() ?? DBNull.Value),
+            new SqlParameter("@UserEmail", (object?)userEmail ?? DBNull.Value),
             new SqlParameter("@ItemsJson", itemsJson)));
 
         await AddAuditLogAsync("VENTA_POS", $"Venta POS #{orderId} por â‚¡{input.Total:N0}", userEmail);
