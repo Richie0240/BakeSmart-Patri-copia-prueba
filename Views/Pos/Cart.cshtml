@@ -174,15 +174,21 @@
                 }
             }
 
-            function currentDiscountRate() {
-                const manual = Math.min(Math.max(Number(form.discountRate?.value || 0), 0), 1);
-                const customer = store.customers.list().find(row =>
-                    (form.customerEmail.value && String(row.email || '').toLowerCase() === String(form.customerEmail.value).toLowerCase()) ||
-                    (form.customerName.value && String(row.fullName || '').toLowerCase() === String(form.customerName.value).toLowerCase())
+            function selectedCustomer() {
+                const email = String(form.customerEmail.value || '').trim().toLowerCase();
+                const name = String(form.customerName.value || '').trim().toLowerCase();
+                return store.customers.list().find(row =>
+                    (email && String(row.email || '').trim().toLowerCase() === email) ||
+                    (name && String(row.fullName || row.name || '').trim().toLowerCase() === name)
                 );
-                const frequent = customer?.frequent ? Number(store.pos.config().frequentCustomerDiscount || 0) : 0;
-                const promotion = Number(store.pos.config().activePromotionDiscount || 0);
-                return Math.max(manual, frequent, promotion);
+            }
+
+            function currentDiscountBreakdown() {
+                const manual = Math.min(Math.max(Number(form.discountRate?.value || 0), 0), 1);
+                const customer = selectedCustomer();
+                const frequent = customer?.frequent ? Math.min(Math.max(Number(store.pos.config().frequentCustomerDiscount || 0), 0), 1) : 0;
+                const totalRate = Math.min(manual + frequent, 1);
+                return { manual, frequent, totalRate, customer };
             }
 
             function remainingStock(productId) {
@@ -223,7 +229,8 @@
                 `).join('');
 
                 const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-                const discountRate = currentDiscountRate();
+                const discountBreakdown = currentDiscountBreakdown();
+                const discountRate = discountBreakdown.totalRate;
                 const discount = subtotal * discountRate;
                 const discountedSubtotal = Math.max(0, subtotal - discount);
                 const tax = discountedSubtotal * Number(store.pos.config().iva || 0);
@@ -232,7 +239,9 @@
                 totalsEl.innerHTML = `
                     ${pendingOrder ? `<div class="pos-total-row"><span>Pedido existente</span><strong>#${pendingOrder.id}</strong></div>` : ''}
                     <div class="pos-total-row"><span>Subtotal</span><strong>${fmt(subtotal)}</strong></div>
-                    ${discount > 0 ? `<div class="pos-total-row"><span>Descuento ${Math.round(discountRate * 100)}%</span><strong>-${fmt(discount)}</strong></div>` : ''}
+                    ${discountBreakdown.frequent > 0 ? `<div class="pos-total-row"><span>Cliente frecuente ${Math.round(discountBreakdown.frequent * 100)}%</span><strong>Aplica</strong></div>` : `<div class="pos-total-row"><span>Cliente frecuente</span><strong>0%</strong></div>`}
+                    ${discountBreakdown.manual > 0 ? `<div class="pos-total-row"><span>Descuento adicional ${Math.round(discountBreakdown.manual * 100)}%</span><strong>Aplica</strong></div>` : ''}
+                    <div class="pos-total-row"><span>Descuento total ${Math.round(discountRate * 100)}%</span><strong>-${fmt(discount)}</strong></div>
                     <div class="pos-total-row"><span>IVA</span><strong>${fmt(tax)}</strong></div>
                     <div class="hr"></div>
                     <div class="pos-total-row total-final"><span>Total</span><strong>${fmt(total)}</strong></div>
@@ -329,6 +338,7 @@
 
             form.discountRate.addEventListener('input', renderCart);
             form.customerEmail.addEventListener('input', renderCart);
+            form.customerName.addEventListener('input', renderCart);
 
             async function completeCheckout(paymentData) {
                 try {
