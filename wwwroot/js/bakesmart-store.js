@@ -505,9 +505,8 @@
           (input.customerName && String(row.fullName || "").toLowerCase() === String(input.customerName).toLowerCase())
         );
         const manualDiscountRate = Math.min(Math.max(Number(input.discountRate || 0), 0), 1);
-        const frequentDiscountRate = customer?.frequent ? Number(api.pos.config().frequentCustomerDiscount || 0) : 0;
-        const activePromotionRate = Number(api.pos.config().activePromotionDiscount || 0);
-        const discountRate = Math.max(manualDiscountRate, frequentDiscountRate, activePromotionRate);
+        const frequentDiscountRate = customer?.frequent ? Math.min(Math.max(Number(api.pos.config().frequentCustomerDiscount || 0), 0), 1) : 0;
+        const discountRate = Math.min(manualDiscountRate + frequentDiscountRate, 1);
         const taxRate = Number(api.pos.config().iva || 0);
         const discountedSubtotal = Math.max(0, subtotal - subtotal * discountRate);
         const tax = discountedSubtotal * taxRate;
