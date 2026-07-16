@@ -396,7 +396,15 @@
 
     document.getElementById('catalogCartClose').addEventListener('click', closeCartSheet);
     document.getElementById('catalogCartBackdrop').addEventListener('click', closeCartSheet);
-    document.getElementById('catalogCartButton').addEventListener('click', openCartSheet);
+    document.getElementById('catalogCartButton').addEventListener('click', () => {
+        if (!cart.length) {
+            app.toast.warning('Agrega productos al carrito antes de finalizar el pedido.');
+            return;
+        }
+
+        if (!requireLogin('Inicia sesion para finalizar el pedido.', '/Client?cart=checkout')) return;
+        window.location.href = '/Client?cart=checkout';
+    });
 
     function updateCartDisplay() {
         const cartSummary = document.getElementById('cartSummary');
