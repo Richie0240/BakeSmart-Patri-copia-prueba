@@ -2503,12 +2503,7 @@ public sealed class SqlStore
             IF @CashMethodId IS NULL SELECT @CashMethodId = PaymentMethodId FROM dbo.MetodosPago WHERE Name = N'Pendiente';
 
             DECLARE @FrequentDiscountRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'frequentCustomerDiscount') AS decimal(18,4));
-            DECLARE @PromotionDiscountRate decimal(18,4) = COALESCE((
-                SELECT MAX(DiscountRate)
-                FROM dbo.Promociones
-                WHERE IsActive = 1
-                  AND CAST(SYSUTCDATETIME() AS date) BETWEEN StartDate AND EndDate
-            ), 0);
+            
             DECLARE @TaxRate decimal(18,4) = TRY_CAST((SELECT SettingValue FROM dbo.ConfiguracionesAplicacion WHERE SettingKey = N'iva') AS decimal(18,4));
             IF @FrequentDiscountRate IS NULL SET @FrequentDiscountRate = 0;
             IF @TaxRate IS NULL SET @TaxRate = 0.13;
@@ -2516,8 +2511,6 @@ public sealed class SqlStore
             DECLARE @EffectiveDiscount decimal(18,2) = 0;
             IF EXISTS (SELECT 1 FROM dbo.Clientes WHERE CustomerId = @CustomerId AND IsFrequent = 1)
                 SET @EffectiveDiscount = ROUND(@Subtotal * @FrequentDiscountRate, 2);
-            DECLARE @PromotionDiscount decimal(18,2) = ROUND(@Subtotal * @PromotionDiscountRate, 2);
-            IF @PromotionDiscount > @EffectiveDiscount SET @EffectiveDiscount = @PromotionDiscount;
 
             DECLARE @DiscountedSubtotal decimal(18,2) = @Subtotal - @EffectiveDiscount;
             DECLARE @EffectiveTax decimal(18,2) = ROUND(@DiscountedSubtotal * @TaxRate, 2);
