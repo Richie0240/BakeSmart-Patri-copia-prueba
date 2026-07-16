@@ -599,6 +599,9 @@ public sealed class SqlStore
     public async Task<int> SaveUserAsync(UserInput input)
     {
         const string sql = """
+            SET XACT_ABORT ON;
+            BEGIN TRAN;
+
             DECLARE @RoleId int = (SELECT RoleId FROM dbo.Roles WHERE RoleName = @RoleName);
 
             IF @RoleId IS NULL
@@ -617,12 +620,14 @@ public sealed class SqlStore
             )
                 THROW 50004, 'Ya existe un usuario con ese correo.', 1;
 
+            DECLARE @SavedUserId int;
+
             IF @UserId IS NULL
             BEGIN
                 INSERT INTO dbo.Usuarios (RoleId, FirstName, LastName, Email, Phone, PasswordHash, AddressLine, IsActive, CreatedAt)
                 VALUES (@RoleId, @FirstName, @LastName, @Email, @Phone, @PasswordHash, @AddressLine, 1, SYSUTCDATETIME());
 
-                SELECT CONVERT(int, SCOPE_IDENTITY());
+                SET @SavedUserId = CONVERT(int, SCOPE_IDENTITY());
             END
             ELSE
             BEGIN
@@ -636,8 +641,52 @@ public sealed class SqlStore
                     PasswordHash = CASE WHEN NULLIF(@PasswordHash, N'') IS NULL THEN PasswordHash ELSE @PasswordHash END
                 WHERE UserId = @UserId;
 
-                SELECT @UserId;
+                SET @SavedUserId = @UserId;
             END;
+
+            IF @RoleName = N'Cliente'
+            BEGIN
+                DECLARE @CustomerId int = (SELECT CustomerId FROM dbo.Clientes WHERE UserId = @SavedUserId);
+
+                IF @CustomerId IS NULL
+                    SET @CustomerId = (SELECT CustomerId FROM dbo.Clientes WHERE LOWER(Email) = LOWER(@Email));
+
+                IF @CustomerId IS NULL
+                BEGIN
+                    INSERT INTO dbo.Clientes (UserId, FullName, Email, Phone, IsFrequent, TotalSpent, CreatedAt)
+                    VALUES (@SavedUserId, CONCAT(@FirstName, N' ', @LastName), @Email, @Phone, 0, 0, SYSUTCDATETIME());
+
+                    SET @CustomerId = CONVERT(int, SCOPE_IDENTITY());
+                END
+                ELSE
+                BEGIN
+                    UPDATE dbo.Clientes
+                    SET UserId = @SavedUserId,
+                        FullName = CONCAT(@FirstName, N' ', @LastName),
+                        Email = @Email,
+                        Phone = @Phone
+                    WHERE CustomerId = @CustomerId;
+                END;
+
+                IF NULLIF(@AddressLine, N'') IS NOT NULL
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM dbo.DireccionesCliente WHERE CustomerId = @CustomerId AND IsDefault = 1)
+                    BEGIN
+                        UPDATE dbo.DireccionesCliente
+                        SET AddressLine = @AddressLine
+                        WHERE CustomerId = @CustomerId AND IsDefault = 1;
+                    END
+                    ELSE
+                    BEGIN
+                        INSERT INTO dbo.DireccionesCliente (CustomerId, Label, AddressLine, Latitude, Longitude, IsDefault)
+                        VALUES (@CustomerId, N'Principal', @AddressLine, 9.932500, -84.079600, 1);
+                    END;
+                END;
+            END;
+
+            COMMIT TRAN;
+
+            SELECT @SavedUserId;
             """;
 
         return Convert.ToInt32(await ScalarAsync(sql,
