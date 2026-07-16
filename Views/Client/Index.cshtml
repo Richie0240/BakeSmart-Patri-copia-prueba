@@ -340,6 +340,22 @@
             let pendingPayment = null;
             let addressPicker = null;
             let submitAfterAddress = false;
+            let cartCheckoutItems = [];
+
+            const cartStorageKey = () => `bakesmart:catalog-cart:${(userEmail || 'guest').trim().toLowerCase()}`;
+            function readCatalogCart() {
+                try {
+                    return JSON.parse(localStorage.getItem(cartStorageKey()) || '[]')
+                        .map(item => ({ id: Number(item.id), name: String(item.name || 'Producto'), price: Number(item.price || 0), quantity: Math.max(1, Number(item.quantity || 1)) }))
+                        .filter(item => item.id > 0 && item.quantity > 0);
+                } catch {
+                    return [];
+                }
+            }
+
+            function clearCatalogCart() {
+                try { localStorage.removeItem(cartStorageKey()); } catch { }
+            }
 
             const money = value => app.utils.formatCurrency(Number(value || 0));
             const clean = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -443,6 +459,7 @@
 
                 const first = availableProducts()[0];
                 if (first) selectProduct(first.id);
+                applyCatalogCartCheckout();
             }
 
             async function loadProfile() {
@@ -542,6 +559,34 @@
                 if (shouldContinue) {
                     requestAnimationFrame(() => form.requestSubmit());
                 }
+            }
+
+
+            function applyCatalogCartCheckout() {
+                const parameters = new URLSearchParams(window.location.search);
+                if (parameters.get('cart') !== 'checkout') return;
+
+                const availableIds = new Set(availableProducts().map(product => Number(product.id)));
+                cartCheckoutItems = readCatalogCart()
+                    .filter(item => availableIds.has(Number(item.id)))
+                    .map(item => {
+                        const product = products.find(row => Number(row.id) === Number(item.id));
+                        return {
+                            ...item,
+                            product,
+                            quantity: Math.min(Number(item.quantity || 1), Number(product?.stock || 0))
+                        };
+                    })
+                    .filter(item => item.product && item.quantity > 0);
+
+                if (!cartCheckoutItems.length) return;
+
+                const first = cartCheckoutItems[0];
+                selectProduct(first.id);
+                quantityInput.value = first.quantity;
+                updateSummary();
+                submitBtn.innerHTML = `<i class="fas fa-receipt"></i> Registrar ${cartCheckoutItems.length} producto${cartCheckoutItems.length === 1 ? '' : 's'} del carrito`;
+                app.toast.success('Carrito cargado. Completa entrega y pago para crear un pedido nuevo.');
             }
 
             function renderSummary() {
@@ -783,14 +828,17 @@
                 const isPickup = data.deliveryMethod === 'retiro';
                 const quantity = Math.max(1, Number(data.quantity || 1));
                 const product = selectedProduct || products.find(item => Number(item.id) === Number(data.productId));
+                const orderItems = cartCheckoutItems.length
+                    ? cartCheckoutItems.map(item => ({ product: item.product, quantity: item.quantity }))
+                    : [{ product, quantity }];
 
-                if (!product) {
+                if (orderItems.some(item => !item.product)) {
                     app.toast.error('Seleccione un producto disponible.');
                     return;
                 }
 
-                if (quantity > product.stock) {
-                    app.toast.error('La cantidad supera el stock disponible.');
+                if (orderItems.some(item => item.quantity > item.product.stock)) {
+                    app.toast.error('La cantidad supera el stock disponible en uno de los articulos.');
                     return;
                 }
 
@@ -802,36 +850,47 @@
                 try {
                     submitBtn.disabled = true;
 
-                    const subtotal = Number(product.price) * quantity;
                     const taxRate = Number(BakeSmartStore.pos.config().iva || 0);
                     const frequentRate = currentProfile?.isFrequent ? Number(BakeSmartStore.pos.config().frequentCustomerDiscount || 0) : 0;
                     const promotionRate = Number(BakeSmartStore.pos.config().activePromotionDiscount || 0);
                     const discountRate = Math.max(frequentRate, promotionRate);
-                    const discount = subtotal * discountRate;
-                    const discountedSubtotal = Math.max(0, subtotal - discount);
-                    const tax = discountedSubtotal * taxRate;
-                    const total = discountedSubtotal + tax;
+                    const createdOrders = [];
 
-                    const result = await BakeSmartStore.createOrder({
-                        customerName: data.customerName,
-                        email: data.customerEmail,
-                        phone: data.customerPhone,
-                        productId: Number(product.id),
-                        quantity,
-                        unitPrice: Number(product.price),
-                        subtotal,
-                        tax,
-                        total,
-                        deliveryDate: data.deliveryDate,
-                        address: isPickup ? null : data.address,
-                        notes: data.notes || null,
-                        paymentMethod: data.paymentMethod,
-                        destinationLatitude: isPickup ? null : Number(data.destinationLatitude),
-                        destinationLongitude: isPickup ? null : Number(data.destinationLongitude),
-                        deliveryReference: isPickup ? null : data.address,
-                        customerAddressId: isPickup ? null : (data.customerAddressId ? Number(data.customerAddressId) : null),
-                        deliveryMethod: data.deliveryMethod
-                    });
+                    for (const item of orderItems) {
+                        const lineProduct = item.product;
+                        const lineQuantity = Math.max(1, Number(item.quantity || 1));
+                        const subtotal = Number(lineProduct.price) * lineQuantity;
+                        const discount = subtotal * discountRate;
+                        const discountedSubtotal = Math.max(0, subtotal - discount);
+                        const tax = discountedSubtotal * taxRate;
+                        const total = discountedSubtotal + tax;
+
+                        const result = await BakeSmartStore.createOrder({
+                            customerName: data.customerName,
+                            email: data.customerEmail,
+                            phone: data.customerPhone,
+                            productId: Number(lineProduct.id),
+                            quantity: lineQuantity,
+                            unitPrice: Number(lineProduct.price),
+                            subtotal,
+                            tax,
+                            total,
+                            deliveryDate: data.deliveryDate,
+                            address: isPickup ? null : data.address,
+                            notes: orderItems.length > 1 ? `${data.notes || ''}
+Pedido generado desde carrito (${lineProduct.name}).`.trim() : (data.notes || null),
+                            paymentMethod: data.paymentMethod,
+                            destinationLatitude: isPickup ? null : Number(data.destinationLatitude),
+                            destinationLongitude: isPickup ? null : Number(data.destinationLongitude),
+                            deliveryReference: isPickup ? null : data.address,
+                            customerAddressId: isPickup ? null : (data.customerAddressId ? Number(data.customerAddressId) : null),
+                            deliveryMethod: data.deliveryMethod
+                        });
+                        createdOrders.push({ ...result, total });
+                    }
+
+                    const result = createdOrders[0];
+                    const total = createdOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
 
                     await BakeSmartStore.refresh({ force: true });
                     products = BakeSmartStore.inventory.list().map(normalizeProduct);
@@ -840,10 +899,14 @@
                     renderProducts();
                     renderSummary();
                     updateSummary();
-                    if (shouldOpenGateway(data.paymentMethod)) {
+                    if (cartCheckoutItems.length) {
+                        clearCatalogCart();
+                        cartCheckoutItems = [];
+                    }
+                    if (shouldOpenGateway(data.paymentMethod) && createdOrders.length === 1) {
                         openPaymentGateway(result.id, total, data.paymentMethod);
                     } else {
-                        app.toast.warning('Pedido registrado. Para iniciar produccion se requiere un abono anticipado o pago en tienda.');
+                        app.toast.warning(createdOrders.length > 1 ? 'Pedidos registrados desde el carrito. Puedes pagar cada abono desde Mis pedidos.' : 'Pedido registrado. Para iniciar produccion se requiere un abono anticipado o pago en tienda.');
                     }
                     form.quantity.value = 1;
                     form.notes.value = '';
